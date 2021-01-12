@@ -7,6 +7,8 @@
  *  - transformListener() - periodically listening to /tf for transform map->laser.
  */
 
+#include <chrono>
+
 #include "ros/ros.h"
 #include <tf/transform_listener.h>
 
@@ -36,9 +38,11 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
     //ROS_INFO("%f", m[event.getConnectionHeader()["callerid"].c_str()].segments[0].points[0].x);
 }
 
+double highest = 0;
 
 // Periodic publisher
 void serverPublish(const ros::TimerEvent&) {
+    auto start = std::chrono::high_resolution_clock::now();
     std::cout << "Currently logged sources: " << m.size() << std::endl;
 
     obstacle_msgs::ObstaclesStamped msg;
@@ -59,8 +63,6 @@ void serverPublish(const ros::TimerEvent&) {
     for (auto it = m.begin(); it != m.end(); ++it) {
         std::cout << it->first << std::endl;
 
-        std::cout << std::get<1>(it->second).circles.size() << std::get<1>(it->second).triangles.size() << std::get<1>(it->second).segments.size() << std::endl;
-
         if (std::get<1>(it->second).circles.size() > 0) {
             if (std::get<0>(it->second).frame_id == "laser") {
                 msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
@@ -79,6 +81,11 @@ void serverPublish(const ros::TimerEvent&) {
             }
         }
     }
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
+    highest = highest < duration.count() ? duration.count() : highest;
+
+    std::cout << duration.count() << " , " << highest << std::endl;
 
     pub_os.publish(msg);
 }
