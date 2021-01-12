@@ -122,8 +122,8 @@ int main(int argc, char **argv) {
     pub_os = n.advertise<obstacle_msgs::ObstaclesStamped>("/obstacles_out", 1);
 
     // Timers
-    ros::Timer tim_obstacles = n.createTimer(ros::Duration(1), serverPublish);
-    ros::Timer tim_transform = n.createTimer(ros::Duration(0.05), transformListener);
+    ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.05), serverPublish);
+    ros::Timer tim_transform = n.createTimer(ros::Duration(0.02), transformListener);
 
     // Spin
     ros::spin();
