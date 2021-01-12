@@ -1,3 +1,12 @@
+/* Obstacle server (C++11)
+ *
+ * Obstacle server is a node fusing data about obstacles from various sources. The idea
+ * is to provide reliable and aggregated data to planners.
+ * This implementation is split into serveral threads using timers:
+ *  - serverPublish() - periodically sending obstacle data to other nodes,
+ *  - transformListener() - periodically listening to /tf for transform map->laser.
+ */
+
 #include "ros/ros.h"
 #include <tf/transform_listener.h>
 
@@ -92,7 +101,13 @@ int main(int argc, char **argv) {
     // NodeHandle -- access point to communications within ROS
     ros::NodeHandle n;
 
-    // Subscribers
+    /* Subscribers
+     *
+     * Obstacle server should be compatible with various message types, like:
+     *  - ObstaclesStamped
+     *  - Obstacles (TBI)
+     *  - LaserScan (TBI?)
+     */
     ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
     listener = new(tf::TransformListener); // Cannot be global as it leads to "call init first"
 
