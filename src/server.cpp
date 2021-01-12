@@ -19,6 +19,8 @@ ros::Publisher pub_os;
 tf::TransformListener* listener;
 tf::StampedTransform transform;
 
+ros::Time latest = ros::Time(0);
+
 // Obstacles callback
 void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& event) {
     // https://github.com/wjwwood/conn_header_test/blob/master/src/listener.cpp
@@ -35,10 +37,15 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
         }
     */
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, event.getMessage()->obstacles);
+    latest = event.getMessage()->header.stamp;
     //ROS_INFO("%f", m[event.getConnectionHeader()["callerid"].c_str()].segments[0].points[0].x);
 }
 
 double highest = 0;
+
+int tim_mes = 0;
+double tim_hig = 0;
+double tim_avr = 0;
 
 // Periodic publisher
 void serverPublish(const ros::TimerEvent&) {
@@ -50,6 +57,7 @@ void serverPublish(const ros::TimerEvent&) {
     msg.header.frame_id = "laser";
 
     // Hold onto transformation
+    // It is better to do it here as we don't use every transformation.
     tf::StampedTransform _transform(transform);
 
     double roll, pitch, yaw, ysin, ycos, tx, ty;
@@ -86,6 +94,13 @@ void serverPublish(const ros::TimerEvent&) {
     highest = highest < duration.count() ? duration.count() : highest;
 
     std::cout << duration.count() << " , " << highest << std::endl;
+
+    tim_mes++;
+    double res = (ros::Time::now() - latest).toSec() / 1000000000;
+    tim_hig = res > tim_hig ? res : tim_hig;
+    tim_avr += res;
+
+    std::cout << "O: " << res << " (" << tim_hig << "/" << tim_avr / tim_mes << ")" << std::endl;
 
     pub_os.publish(msg);
 }
