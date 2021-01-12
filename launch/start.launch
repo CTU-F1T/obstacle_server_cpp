@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!--
+  Author: Jaroslav Klapálek <klapajar@fel.cvut.cz>
+  Description: Launch a node for obstacle server (C++).
+-->
+<launch>
+  <node pkg="obstacle_server_cpp" type="obstacle_server_cpp_node" name="obstacle_server_cpp" output="screen">
+  </node>
+</launch>
