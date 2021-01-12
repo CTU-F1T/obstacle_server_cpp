@@ -11,6 +11,7 @@ find_package(catkin REQUIRED
     roscpp
     obstacle_msgs
     std_msgs
+    tf
 )
 
 ## System dependencies are found with CMake's conventions

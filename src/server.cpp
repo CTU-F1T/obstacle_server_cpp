@@ -1,9 +1,12 @@
 #include "ros/ros.h"
+#include <tf/transform_listener.h>
 
 #include "obstacle_msgs/ObstaclesStamped.h"
 
 std::map<std::string, std::pair<std_msgs::Header, obstacle_msgs::Obstacles>> m;
 ros::Publisher pub_os;
+tf::TransformListener* listener;
+tf::StampedTransform transform;
 
 // Obstacles callback
 void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& event) {
@@ -33,13 +36,51 @@ void serverPublish(const ros::TimerEvent&) {
     msg.header.stamp = ros::Time::now();
     msg.header.frame_id = "laser";
 
+    // Hold onto transformation
+    tf::StampedTransform _transform(transform);
+
+    double roll, pitch, yaw, ysin, ycos, tx, ty;
+    tf::Vector3 vec = _transform.getOrigin();
+    tx = vec.getX();
+    ty = vec.getY();
+    tf::Matrix3x3(tf::Quaternion(_transform.getRotation())).getRPY(roll, pitch, yaw);
+    ysin = sin(yaw);
+    ycos = cos(yaw);
+
     for (auto it = m.begin(); it != m.end(); ++it) {
         std::cout << it->first << std::endl;
 
-        msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
+        std::cout << std::get<1>(it->second).circles.size() << std::get<1>(it->second).triangles.size() << std::get<1>(it->second).segments.size() << std::endl;
+
+        if (std::get<1>(it->second).circles.size() > 0) {
+            if (std::get<0>(it->second).frame_id == "laser") {
+                msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
+            } else {
+                int oldsize = msg.obstacles.circles.size();
+                msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
+
+                double _x, _y;
+                for (auto circle = msg.obstacles.circles.begin() + oldsize; circle != msg.obstacles.circles.end(); ++circle) {
+                    _x = circle->center.x;
+                    _y = circle->center.y;
+
+                    circle->center.x = _x * ycos - _y * ysin + tx;
+                    circle->center.y = _x * ysin + _y * ycos + ty;
+                }
+            }
+        }
     }
 
     pub_os.publish(msg);
+}
+
+// Periodic listener
+void transformListener(const ros::TimerEvent&) {
+    try {
+        listener->lookupTransform("/base_link", "/map", ros::Time(0), transform);
+    } catch (tf::TransformException &ex) {
+        ROS_ERROR("%s", ex.what());
+    }
 }
 
 
@@ -53,12 +94,14 @@ int main(int argc, char **argv) {
 
     // Subscribers
     ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
+    listener = new(tf::TransformListener); // Cannot be global as it leads to "call init first"
 
     // Publishers
     pub_os = n.advertise<obstacle_msgs::ObstaclesStamped>("/obstacles_out", 1);
 
     // Timers
     ros::Timer tim_obstacles = n.createTimer(ros::Duration(1), serverPublish);
+    ros::Timer tim_transform = n.createTimer(ros::Duration(0.05), transformListener);
 
     // Spin
     ros::spin();
