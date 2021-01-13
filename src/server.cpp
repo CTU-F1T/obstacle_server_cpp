@@ -22,6 +22,140 @@ tf::StampedTransform transform;
 
 ros::Time latest = ros::Time(0);
 
+
+// TimeMeasurer
+class TimeMeasurer {
+    private:
+        std::string _name = "";
+        std::string _unit = "";
+        std::chrono::time_point<std::chrono::high_resolution_clock> _start;
+        int _count = 0;
+        double _sum = 0;
+        double _max = 0;
+        double _last = 0;
+
+        void updateStatistics() {
+            this->_count++;
+            this->_sum += this->_last;
+            this->_max = this->_last > this->_max ? this->_last : this->_max;
+        }
+
+    public:
+        TimeMeasurer() {
+            this->_name = "TimeMeasurer";
+            this->_unit = "s";
+        };
+
+        TimeMeasurer(std::string name) {
+            this->_name = name;
+            this->_unit = "s";
+        };
+
+        TimeMeasurer(std::string name, std::string unit) {
+            this->_name = name;
+            this->_unit = unit;
+        };
+
+        ~TimeMeasurer(){};
+
+        void start() {
+            this->_start = std::chrono::high_resolution_clock::now();
+        }
+
+        void end() {
+            if (this->_unit == "s") {
+                this->_last = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - this->_start).count();
+            } else if (this->_unit == "ms") {
+                this->_last = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - this->_start).count();
+            } else if (this->_unit == "us") {
+                this->_last = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - this->_start).count();
+            } else if (this->_unit == "ns") {
+                this->_last = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::high_resolution_clock::now() - this->_start).count();
+            } else {
+                this->_last = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - this->_start).count();
+            }
+
+            this->updateStatistics();
+        }
+
+        friend std::ostream& operator<< (std::ostream& os, const TimeMeasurer& tm) {
+            //os << boost::format("%s: cur=%.4f%s avg=%.4f%s max=%.4f%s" % tm._name % tm._last % tm->_unit % (tm->_sum / tm->_count) % tm->_unit % tm->_max % tm->_unit;
+            if (tm._count > 0) {
+                os << tm._name << ": cur=" << tm._last << tm._unit << " avg=" << (tm._sum / tm._count) << tm._unit << " max=" << tm._max << tm._unit;
+            } else {
+                os << tm._name << ": cur=" << tm._last << tm._unit << " avg=NONE" << " max=" << tm._max << tm._unit;
+            }
+            return os;
+        }
+};
+
+
+// DelayMeasurer
+class DelayMeasurer {
+    private:
+        std::string _name = "";
+        std::string _unit = "";
+        ros::Time _start;
+        int _count = 0;
+        double _sum = 0;
+        double _max = 0;
+        double _last = 0;
+
+        void updateStatistics() {
+            this->_count++;
+            this->_sum += this->_last;
+            this->_max = this->_last > this->_max ? this->_last : this->_max;
+        }
+
+    public:
+        DelayMeasurer() {
+            this->_name = "DelayMeasurer";
+            this->_unit = "s";
+        };
+
+        DelayMeasurer(std::string name) {
+            this->_name = name;
+            this->_unit = "s";
+        };
+
+        DelayMeasurer(std::string name, std::string unit) {
+            this->_name = name;
+            this->_unit = unit;
+        };
+
+        ~DelayMeasurer(){};
+
+        void delay(std_msgs::Header header) {
+            this->delay(header.stamp);
+        }
+
+        void delay(ros::Time stamp) {
+            if (this->_unit == "s") {
+                this->_last = (ros::Time::now() - stamp).toSec();
+            } else if (this->_unit == "ms") {
+                this->_last = (ros::Time::now() - stamp).toSec() * 1000;
+            } else if (this->_unit == "us") {
+                this->_last = (ros::Time::now() - stamp).toSec() * 1000000;
+            } else if (this->_unit == "ns") {
+                this->_last = (ros::Time::now() - stamp).toNSec();
+            } else {
+                this->_last = (ros::Time::now() - stamp).toSec();
+            }
+
+            this->updateStatistics();
+        }
+
+        friend std::ostream& operator<< (std::ostream& os, const DelayMeasurer& dm) {
+            if (dm._count > 0) {
+                os << dm._name << ": cur=" << dm._last << dm._unit << " avg=" << (dm._sum / dm._count) << dm._unit << " max=" << dm._max << dm._unit;
+            } else {
+                os << dm._name << ": cur=" << dm._last << dm._unit << " avg=NONE" << " max=" << dm._max << dm._unit;
+            }
+            return os;
+        }
+};
+
+
 // Obstacles callback
 void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& event) {
     // https://github.com/wjwwood/conn_header_test/blob/master/src/listener.cpp
