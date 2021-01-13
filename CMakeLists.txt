@@ -12,6 +12,7 @@ find_package(catkin REQUIRED
     obstacle_msgs
     std_msgs
     tf
+    sensor_msgs
 )
 
 ## System dependencies are found with CMake's conventions

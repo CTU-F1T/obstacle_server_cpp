@@ -12,6 +12,7 @@
 #include "ros/ros.h"
 #include <tf/transform_listener.h>
 
+#include "sensor_msgs/LaserScan.h"
 #include "obstacle_msgs/ObstaclesStamped.h"
 
 std::map<std::string, std::pair<std_msgs::Header, obstacle_msgs::Obstacles>> m;
@@ -40,6 +41,47 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
     latest = event.getMessage()->header.stamp;
     //ROS_INFO("%f", m[event.getConnectionHeader()["callerid"].c_str()].segments[0].points[0].x);
 }
+
+double scan_highest = 0;
+
+int scan_mes = 0;
+double scan_hig = 0;
+double scan_avr = 0;
+
+
+// LaserScan callback
+void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
+    auto start = std::chrono::high_resolution_clock::now();
+    boost::shared_ptr<obstacle_msgs::ObstaclesStamped> os(new obstacle_msgs::ObstaclesStamped);
+    //std::vector<obstacle_msgs::CircleObstacle> obs(event.getMessage()->ranges.size());
+    os->obstacles.circles.reserve(event.getMessage()->ranges.size());
+
+    // Convert LaserScan to CircleObstacle[]
+    // TODO: Use std::transform
+    for (float angle = event.getMessage()->angle_min, i = 0; i < event.getMessage()->ranges.size(); angle += event.getMessage()->angle_increment, i++) {
+        obstacle_msgs::CircleObstacle circle;
+        circle.center.x = cos(angle) * event.getMessage()->ranges.at(i);
+        circle.center.y = sin(angle) * event.getMessage()->ranges.at(i);
+        circle.radius = 0.01;
+        os->obstacles.circles.emplace_back(circle);
+    }
+
+    m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, os->obstacles);
+    latest = event.getMessage()->header.stamp;
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
+    scan_highest = scan_highest < duration.count() ? duration.count() : scan_highest;
+
+    std::cout << "Scan: " << duration.count() << " , " << scan_highest << std::endl;
+
+    scan_mes++;
+    double res = (ros::Time::now() - latest).toSec() / 1000000000;
+    scan_hig = res > scan_hig ? res : scan_hig;
+    scan_avr += res;
+
+    std::cout << "S: " << res << " (" << scan_hig << "/" << scan_avr / scan_mes << ")" << std::endl;
+}
+
 
 double highest = 0;
 
@@ -128,10 +170,11 @@ int main(int argc, char **argv) {
      * Obstacle server should be compatible with various message types, like:
      *  - ObstaclesStamped
      *  - Obstacles (TBI)
-     *  - LaserScan (TBI?)
+     *  - LaserScan
      */
     ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
     listener = new(tf::TransformListener); // Cannot be global as it leads to "call init first"
+    ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback);
 
     // Publishers
     pub_os = n.advertise<obstacle_msgs::ObstaclesStamped>("/obstacles_out", 1);
