@@ -252,7 +252,9 @@ void serverPublish(const ros::TimerEvent&) {
     }
 
     tm_server.end();
-    dm_server.delay(latest);
+    if (m.size() > 0) {
+        dm_server.delay(latest);
+    }
     pub_os.publish(msg);
 }
 
