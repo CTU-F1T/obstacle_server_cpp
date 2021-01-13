@@ -75,11 +75,11 @@ void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
     std::cout << "Scan: " << duration.count() << " , " << scan_highest << std::endl;
 
     scan_mes++;
-    double res = (ros::Time::now() - latest).toSec() / 1000000000;
+    double res = (ros::Time::now() - latest).toSec() * 1000;
     scan_hig = res > scan_hig ? res : scan_hig;
     scan_avr += res;
 
-    std::cout << "S: " << res << " (" << scan_hig << "/" << scan_avr / scan_mes << ")" << std::endl;
+    std::cout << "S: " << res << "ms (" << scan_hig << "ms/" << scan_avr / scan_mes << "ms)" << std::endl;
 }
 
 
@@ -138,11 +138,11 @@ void serverPublish(const ros::TimerEvent&) {
     std::cout << duration.count() << " , " << highest << std::endl;
 
     tim_mes++;
-    double res = (ros::Time::now() - latest).toSec() / 1000000000;
+    double res = (ros::Time::now() - latest).toSec() * 1000;
     tim_hig = res > tim_hig ? res : tim_hig;
     tim_avr += res;
 
-    std::cout << "O: " << res << " (" << tim_hig << "/" << tim_avr / tim_mes << ")" << std::endl;
+    std::cout << "O: " << res << "ms (" << tim_hig << "ms/" << tim_avr / tim_mes << "ms)" << std::endl;
 
     pub_os.publish(msg);
 }
