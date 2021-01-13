@@ -176,16 +176,13 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
     //ROS_INFO("%f", m[event.getConnectionHeader()["callerid"].c_str()].segments[0].points[0].x);
 }
 
-double scan_highest = 0;
 
-int scan_mes = 0;
-double scan_hig = 0;
-double scan_avr = 0;
-
+TimeMeasurer tm_laserscan("laserscan", "us");
+DelayMeasurer dm_laserscan("scandelay", "ms");
 
 // LaserScan callback
 void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
-    auto start = std::chrono::high_resolution_clock::now();
+    tm_laserscan.start();
     boost::shared_ptr<obstacle_msgs::ObstaclesStamped> os(new obstacle_msgs::ObstaclesStamped);
     //std::vector<obstacle_msgs::CircleObstacle> obs(event.getMessage()->ranges.size());
     os->obstacles.circles.reserve(event.getMessage()->ranges.size());
@@ -203,31 +200,17 @@ void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, os->obstacles);
     latest = event.getMessage()->header.stamp;
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-    scan_highest = scan_highest < duration.count() ? duration.count() : scan_highest;
-
-    std::cout << "Scan: " << duration.count() << " , " << scan_highest << std::endl;
-
-    double res = (ros::Time::now() - latest).toSec() * 1000;
-    if (res < 10000000) {
-        scan_mes++;
-        scan_hig = res > scan_hig ? res : scan_hig;
-        scan_avr += res;
-
-        std::cout << "S: " << res << "ms (" << scan_hig << "ms/" << scan_avr / scan_mes << "ms)" << std::endl;
-    }
+    tm_laserscan.end();
+    dm_laserscan.delay(event.getMessage()->header.stamp);
 }
 
 
-double highest = 0;
-
-int tim_mes = 0;
-double tim_hig = 0;
-double tim_avr = 0;
+TimeMeasurer tm_server("server", "us");
+DelayMeasurer dm_server("serverdelay", "ms");
 
 // Periodic publisher
 void serverPublish(const ros::TimerEvent&) {
-    auto start = std::chrono::high_resolution_clock::now();
+    tm_server.start();
     std::cout << "Currently logged sources: " << m.size() << std::endl;
 
     obstacle_msgs::ObstaclesStamped msg;
@@ -268,19 +251,8 @@ void serverPublish(const ros::TimerEvent&) {
         }
     }
 
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::high_resolution_clock::now() - start);
-    highest = highest < duration.count() ? duration.count() : highest;
-
-    std::cout << duration.count() << " , " << highest << std::endl;
-
-    double res = (ros::Time::now() - latest).toSec() * 1000;
-    if (res < 10000000) {
-        tim_mes++;
-        tim_hig = res > tim_hig ? res : tim_hig;
-        tim_avr += res;
-
-        std::cout << "O: " << res << "ms (" << tim_hig << "ms/" << tim_avr / tim_mes << "ms)" << std::endl;
-    }
+    tm_server.end();
+    dm_server.delay(latest);
     pub_os.publish(msg);
 }
 
@@ -291,6 +263,15 @@ void transformListener(const ros::TimerEvent&) {
     } catch (tf::TransformException &ex) {
         ROS_ERROR("%s", ex.what());
     }
+}
+
+
+// Periodically print summary
+void printSummary(const ros::TimerEvent&) {
+    std::cout << tm_laserscan << std::endl;
+    std::cout << tm_server << std::endl;
+    std::cout << dm_laserscan << std::endl;
+    std::cout << dm_server << std::endl;
 }
 
 
@@ -319,6 +300,7 @@ int main(int argc, char **argv) {
     // Timers
     ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.05), serverPublish);
     ros::Timer tim_transform = n.createTimer(ros::Duration(0.02), transformListener);
+    ros::Timer tim_summary = n.createTimer(ros::Duration(2), printSummary);
 
     // Spin
     ros::spin();
