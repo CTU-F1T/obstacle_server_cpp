@@ -178,10 +178,12 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
 
 
 TimeMeasurer tm_laserscan("laserscan", "us");
+DelayMeasurer dm_laserscanstart("scandelay_start", "ms");
 DelayMeasurer dm_laserscan("scandelay", "ms");
 
 // LaserScan callback
 void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
+    dm_laserscanstart.delay(event.getMessage()->header.stamp);
     tm_laserscan.start();
     boost::shared_ptr<obstacle_msgs::ObstaclesStamped> os(new obstacle_msgs::ObstaclesStamped);
     //std::vector<obstacle_msgs::CircleObstacle> obs(event.getMessage()->ranges.size());
@@ -206,10 +208,14 @@ void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
 
 
 TimeMeasurer tm_server("server", "us");
+DelayMeasurer dm_serverstart("serverdelay_start", "ms");
 DelayMeasurer dm_server("serverdelay", "ms");
 
 // Periodic publisher
 void serverPublish(const ros::TimerEvent&) {
+    if (m.size() > 0 and latest.toSec() > 0) {
+        dm_serverstart.delay(latest);
+    }
     tm_server.start();
     std::cout << "Currently logged sources: " << m.size() << std::endl;
 
@@ -252,7 +258,7 @@ void serverPublish(const ros::TimerEvent&) {
     }
 
     tm_server.end();
-    if (m.size() > 0) {
+    if (m.size() > 0 and latest.toSec() > 0) {
         dm_server.delay(latest);
     }
     pub_os.publish(msg);
@@ -272,8 +278,10 @@ void transformListener(const ros::TimerEvent&) {
 void printSummary(const ros::TimerEvent&) {
     std::cout << tm_laserscan << std::endl;
     std::cout << tm_server << std::endl;
+    std::cout << dm_laserscanstart << std::endl;
     std::cout << dm_laserscan << std::endl;
-    std::cout << dm_server << std::endl;
+    std::cout << dm_serverstart << std::endl;
+    std::cout << dm_server << std::endl << std::endl;
 }
 
 
