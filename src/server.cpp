@@ -217,7 +217,7 @@ void serverPublish(const ros::TimerEvent&) {
         dm_serverstart.delay(latest);
     }
     tm_server.start();
-    std::cout << "Currently logged sources: " << m.size() << std::endl;
+    //std::cout << "Currently logged sources: " << m.size() << std::endl;
 
     obstacle_msgs::ObstaclesStamped msg;
     msg.header.stamp = ros::Time::now();
@@ -236,7 +236,7 @@ void serverPublish(const ros::TimerEvent&) {
     ycos = cos(yaw);
 
     for (auto it = m.begin(); it != m.end(); ++it) {
-        std::cout << it->first << std::endl;
+        //std::cout << it->first << std::endl;
 
         if (std::get<1>(it->second).circles.size() > 0) {
             if (std::get<0>(it->second).frame_id == "laser") {
@@ -269,7 +269,7 @@ void transformListener(const ros::TimerEvent&) {
     try {
         listener->lookupTransform("/base_link", "/map", ros::Time(0), transform);
     } catch (tf::TransformException &ex) {
-        ROS_ERROR("%s", ex.what());
+        //ROS_ERROR("%s", ex.what());
     }
 }
 
