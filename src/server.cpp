@@ -177,6 +177,8 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
 }
 
 
+void serverPublish();
+
 TimeMeasurer tm_laserscan("laserscan", "us");
 DelayMeasurer dm_laserscanstart("scandelay_start", "ms");
 DelayMeasurer dm_laserscan("scandelay", "ms");
@@ -204,6 +206,8 @@ void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
 
     tm_laserscan.end();
     dm_laserscan.delay(event.getMessage()->header.stamp);
+
+    serverPublish();
 }
 
 
@@ -212,7 +216,8 @@ DelayMeasurer dm_serverstart("serverdelay_start", "ms");
 DelayMeasurer dm_server("serverdelay", "ms");
 
 // Periodic publisher
-void serverPublish(const ros::TimerEvent&) {
+//void serverPublish(const ros::TimerEvent&) {
+void serverPublish() {
     if (m.size() > 0 and latest.toSec() > 0) {
         dm_serverstart.delay(latest);
     }
@@ -308,7 +313,7 @@ int main(int argc, char **argv) {
     pub_os = n.advertise<obstacle_msgs::ObstaclesStamped>("/obstacles_out", 1);
 
     // Timers
-    ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
+    //ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
     ros::Timer tim_transform = n.createTimer(ros::Duration(0.01), transformListener);
     ros::Timer tim_summary = n.createTimer(ros::Duration(2), printSummary);
 
