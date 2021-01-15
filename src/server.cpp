@@ -307,7 +307,7 @@ int main(int argc, char **argv) {
      */
     ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
     listener = new(tf::TransformListener); // Cannot be global as it leads to "call init first"
-    ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback);
+    ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback, ros::TransportHints().tcpNoDelay());
 
     // Publishers
     pub_os = n.advertise<obstacle_msgs::ObstaclesStamped>("/obstacles_out", 1);
