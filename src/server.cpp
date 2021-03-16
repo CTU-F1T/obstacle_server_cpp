@@ -158,22 +158,7 @@ class DelayMeasurer {
 
 // Obstacles callback
 void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& event) {
-    // https://github.com/wjwwood/conn_header_test/blob/master/src/listener.cpp
-    /*
-        const std::string& publisher_name = event.getPublisherName();
-        const ros::M_string& header = event.getConnectionHeader();
-        ros::Time receipt_time = event.getReceiptTime();
-
-        const obstacle_msgs::ObstaclesStamped::ConstPtr& data = event.getMessage();
-
-        std::cout << "Header:\n";
-        for (auto &kv : header) {
-            std::cout << "  " << kv.first << " has value " << kv.second << std::endl;
-        }
-    */
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, event.getMessage()->obstacles);
-    //latest = event.getMessage()->header.stamp;
-    //ROS_INFO("%f", m[event.getConnectionHeader()["callerid"].c_str()].segments[0].points[0].x);
 }
 
 
