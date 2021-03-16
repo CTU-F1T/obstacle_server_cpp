@@ -20,7 +20,7 @@ ros::Publisher pub_os;
 tf::TransformListener* listener;
 tf::StampedTransform transform;
 
-ros::Time latest = ros::Time(0);
+ros::Time latest;
 
 
 // TimeMeasurer
@@ -172,7 +172,7 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
         }
     */
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, event.getMessage()->obstacles);
-    latest = event.getMessage()->header.stamp;
+    //latest = event.getMessage()->header.stamp;
     //ROS_INFO("%f", m[event.getConnectionHeader()["callerid"].c_str()].segments[0].points[0].x);
 }
 
