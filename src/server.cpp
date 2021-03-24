@@ -22,6 +22,7 @@ tf::StampedTransform transform;
 
 ros::Time latest;
 std::string ls_frame = "laser";
+bool delay_measure = false;
 
 
 // TimeMeasurer
@@ -60,10 +61,13 @@ class TimeMeasurer {
         ~TimeMeasurer(){};
 
         void start() {
-            this->_start = std::chrono::high_resolution_clock::now();
+            if (delay_measure)
+                this->_start = std::chrono::high_resolution_clock::now();
         }
 
         void end() {
+            if (!delay_measure) return;
+
             if (this->_unit == "s") {
                 this->_last = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::high_resolution_clock::now() - this->_start).count();
             } else if (this->_unit == "ms") {
@@ -127,10 +131,13 @@ class DelayMeasurer {
         ~DelayMeasurer(){};
 
         void delay(std_msgs::Header header) {
-            this->delay(header.stamp);
+            if (delay_measure)
+                this->delay(header.stamp);
         }
 
         void delay(ros::Time stamp) {
+            if (!delay_measure) return;
+
             if (this->_unit == "s") {
                 this->_last = (ros::Time::now() - stamp).toSec();
             } else if (this->_unit == "ms") {
@@ -288,6 +295,12 @@ int main(int argc, char **argv) {
     // NodeHandle -- access point to communications within ROS
     ros::NodeHandle n;
 
+    /* Obtain parameters
+     *
+     * /delay_measure -- when true, timing is performed
+     */
+    n.getParam("delay_measure", delay_measure);
+
     /* Subscribers
      *
      * Obstacle server should be compatible with various message types, like:
@@ -305,7 +318,7 @@ int main(int argc, char **argv) {
     // Timers
     //ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
     ros::Timer tim_transform = n.createTimer(ros::Duration(0.01), transformListener);
-    ros::Timer tim_summary = n.createTimer(ros::Duration(2), printSummary);
+    if (delay_measure) ros::Timer tim_summary = n.createTimer(ros::Duration(2), printSummary);
 
     // Spin
     ros::spin();
