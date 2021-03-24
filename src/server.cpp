@@ -21,6 +21,7 @@ tf::TransformListener* listener;
 tf::StampedTransform transform;
 
 ros::Time latest;
+std::string ls_frame = "laser";
 
 
 // TimeMeasurer
@@ -186,6 +187,10 @@ void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
         os->obstacles.circles.emplace_back(circle);
     }
 
+    // Remember frame id
+    ls_frame = event.getMessage()->header.frame_id;
+
+    // Store scan
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, os->obstacles);
     latest = event.getMessage()->header.stamp;
 
@@ -211,7 +216,7 @@ void serverPublish() {
 
     obstacle_msgs::ObstaclesStamped msg;
     msg.header.stamp = ros::Time::now();
-    msg.header.frame_id = "laser";
+    msg.header.frame_id = ls_frame;
 
     // Hold onto transformation
     // It is better to do it here as we don't use every transformation.
@@ -229,7 +234,7 @@ void serverPublish() {
         //std::cout << it->first << std::endl;
 
         if (std::get<1>(it->second).circles.size() > 0) {
-            if (std::get<0>(it->second).frame_id == "laser") {
+            if (std::get<0>(it->second).frame_id == ls_frame) {
                 msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
             } else {
                 int oldsize = msg.obstacles.circles.size();
