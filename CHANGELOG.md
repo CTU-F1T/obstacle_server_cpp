@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## Unreleased
 
+## 0.0.3 - 2021-03-24
+### Added
+- Remapping topic to the launch file.
+
+### Fixed
+- Frame `frame_id` received from Lidar is used as reference instead of static `laser`.
+- When using simulated time, wait until it is truly published.
+
 ## 0.0.2 - 2021-03-16
 ### Fixed
 - Fixed dependencies and dependency issues with `obstacle_msgs`.
