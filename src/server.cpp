@@ -8,6 +8,7 @@
  */
 
 #include <chrono>
+#include <thread>
 
 #include "ros/ros.h"
 #include <tf/transform_listener.h>
@@ -300,6 +301,24 @@ int main(int argc, char **argv) {
      * /delay_measure -- when true, timing is performed
      */
     n.getParam("delay_measure", delay_measure);
+
+    /* Simulated time workaround
+     *
+     * When using simulated time (e.g. Stage), Time::now() returns
+     * value 0 until something was received from '/clock'. So, we
+     * will wait for it.
+     *
+     * Side note: On the other hand, when running Stage, sometimes
+     * the messages arrive from the future. :(
+     */
+    while (ros::ok()) {
+        if ( ros::Time::now().toSec() == 0 ) {
+            ROS_WARN("Current time is 0. Waiting for it to change.");
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        } else {
+            break;
+        }
+    }
 
     /* Subscribers
      *
