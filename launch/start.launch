@@ -4,14 +4,13 @@
   Description: Launch a node for obstacle server (C++).
 -->
 <launch>
-  <arg name="/scan" default="/scan" doc="Topic for remapping the '/scan'." />
-  <arg name="/obstacles_in" default="/obstacles_in" doc="Topic for remapping the '/obstacles_in'." />
-  <arg name="/obstacles_out" default="/obstacles_out" doc="Topic for remapping the '/obstacles_out'." />
-  <arg name="remap" default="false" doc="When true use arguments above for remapping." />
+  <arg name="/scan" default="" doc="Topic for remapping the '/scan'." />
+  <arg name="/obstacles_in" default="" doc="Topic for remapping the '/obstacles_in'." />
+  <arg name="/obstacles_out" default="" doc="Topic for remapping the '/obstacles_out'." />
 
   <node pkg="obstacle_server_cpp" type="obstacle_server_cpp_node" name="obstacle_server_cpp" output="screen">
-    <remap from="/scan" to="$(arg /scan)" if="$(arg remap)" />
-    <remap from="/obstacles_in" to="$(arg /obstacles_in)" if="$(arg remap)" />
-    <remap from="/obstacles_out" to="$(arg /obstacles_out)" if="$(arg remap)" />
+    <remap from="/scan" to="$(arg /scan)" if="$(eval arg('/scan') != '')" />
+    <remap from="/obstacles_in" to="$(arg /obstacles_in)" if="$(eval arg('/obstacles_in') != '')" />
+    <remap from="/obstacles_out" to="$(arg /obstacles_out)" if="$(eval arg('/obstacles_out') != '')" />
   </node>
 </launch>
