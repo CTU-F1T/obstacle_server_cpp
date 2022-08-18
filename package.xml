@@ -4,14 +4,14 @@
   schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>obstacle_server_cpp</name>
-  <version>0.0.9</version>
+  <version>0.1.0</version>
   <description>
     An implementation of obstacle server in C++.
   </description>
 
   <maintainer email="f1tenth@rtime.felk.cvut.cz">F1tenth CTU Community</maintainer>
 
-  <license>TODO</license>
+  <license>GPLv3</license>
 
   <author email="klapajar@fel.cvut.cz">Jaroslav Klapálek</author>
 
