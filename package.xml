@@ -4,7 +4,7 @@
   schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>obstacle_server_cpp</name>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <description>
     An implementation of obstacle server in C++.
   </description>
@@ -29,6 +29,7 @@
   <build_depend>sensor_msgs</build_depend>
 
   <!-- exec_depend libraries -->
+  <exec_depend>roscpp</exec_depend>
   <exec_depend>tf</exec_depend>
 
   <!-- exec_depend message types -->
