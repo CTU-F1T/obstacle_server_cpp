@@ -15,6 +15,7 @@
 
 #include "sensor_msgs/LaserScan.h"
 #include "obstacle_msgs/ObstaclesStamped.h"
+#include "nav_msgs/OccupancyGrid.h"
 
 std::map<std::string, std::pair<std_msgs::Header, obstacle_msgs::Obstacles>> m;
 ros::Publisher pub_os;

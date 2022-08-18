@@ -13,6 +13,7 @@ find_package(catkin REQUIRED
     std_msgs
     tf
     sensor_msgs
+    nav_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -114,6 +115,7 @@ catkin_package(
     std_msgs
     tf
     sensor_msgs
+    nav_msgs
 #  DEPENDS system_lib
 )
 

@@ -5,4 +5,5 @@ Merges and publishes obstacles (C++).
 [<state> /obstacles_in|obstacle_msgs/ObstaclesStamped]->[obstacle_server_cpp]
 [<state> /scan|sensor_msgs/LaserScan]->[obstacle_server_cpp]
 [<state> /tf|geometry_msgs/TransformStamped]->[obstacle_server_cpp]
+[<state> /map_static|nav_msgs/OccupancyGrid]->[obstacle_server_cpp]
 [obstacle_server_cpp]->[<state> /obstacles_out|obstacle_msgs/ObstaclesStamped]
