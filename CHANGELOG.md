@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## Unreleased
+## 0.0.9 - 2022-08-18
+### Added
+- Readme file.
+- Link to the new repository.
+
+### Changed
+- Updated package manifest format to version 3.
+- Maintainer is now set to the community email.
+
+### Deprecated
+- Starting from v0.1.0 this package will be available only on GitHub. This is the last version here.
 
 ## 0.0.3 - 2021-03-24
 ### Added
