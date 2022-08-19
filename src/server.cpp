@@ -179,6 +179,38 @@ class DelayMeasurer {
 };
 
 
+// Inflation utility
+void inflateObstacle(nav_msgs::OccupancyGrid* map, int _x, int _y, double radius = 0.0) {
+    if ((_y * map->info.width + _x) < map->data.size()) {
+        //map.data.at(_y * map.info.width + _x) = 100;
+
+        int inflation = INFLATION;
+
+        if (radius > 0.0) {
+            inflation = int(radius / map->info.resolution);
+        }
+
+        for (int x = -inflation; x < inflation; x++) {
+            if (x + _x < 0 || x + _x >= map->info.width) {
+                continue;
+            }
+
+            for (int y = -inflation; y < inflation; y++) {
+                if (y + _y < 0 || y + _y >= map->info.height) {
+                    continue;
+                }
+
+                if (x*x + y*y >= inflation * inflation) {
+                    continue;
+                }
+
+                map->data.at((y + _y) * map->info.width + (x + _x)) = 100;
+            }
+        }
+    }
+}
+
+
 // Obstacles callback
 void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& event) {
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, event.getMessage()->obstacles);
@@ -296,12 +328,25 @@ void serverPublish() {
     ysinI = sin(yawI);
     ycosI = cos(yawI);
 
+    // OccupancyGrid
+    nav_msgs::OccupancyGrid map;
+    map.info = metadata;
+    map.data = saved_map;
+
     for (auto it = m.begin(); it != m.end(); ++it) {
         //std::cout << it->first << std::endl;
 
         if (std::get<1>(it->second).circles.size() > 0) {
             if (std::get<0>(it->second).frame_id == ls_frame) {
                 msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
+
+                for (auto circle = std::get<1>(it->second).circles.begin(); circle != std::get<1>(it->second).circles.end(); ++circle) {
+                    inflateObstacle(&map,
+                        int((circle->center.x * ycosI - circle->center.y * ysinI + txI - map.info.origin.position.x) / map.info.resolution),
+                        int((circle->center.x * ysinI + circle->center.y * ycosI + tyI - map.info.origin.position.y) / map.info.resolution)
+                    );
+                }
+
             } else {
                 int oldsize = msg.obstacles.circles.size();
                 msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
@@ -310,6 +355,8 @@ void serverPublish() {
                 for (auto circle = msg.obstacles.circles.begin() + oldsize; circle != msg.obstacles.circles.end(); ++circle) {
                     _x = circle->center.x;
                     _y = circle->center.y;
+
+                    inflateObstacle(&map, _x, _y, circle->radius);
 
                     circle->center.x = _x * ycos - _y * ysin + tx;
                     circle->center.y = _x * ysin + _y * ycos + ty;
@@ -323,51 +370,8 @@ void serverPublish() {
         dm_server.delay(latest);
     }
 
-    // OccupancyGrid
-    nav_msgs::OccupancyGrid map;
-    map.info = metadata;
-    map.data = saved_map;
-
-    double __x, __y;
-    for (auto circle = msg.obstacles.circles.begin(); circle != msg.obstacles.circles.end(); ++circle) {
-        __x = circle->center.x;
-        __y = circle->center.y;
-
-        auto _x = int((__x * ycosI - __y * ysinI + txI - map.info.origin.position.x) / map.info.resolution);
-        auto _y = int((__x * ysinI + __y * ycosI + tyI - map.info.origin.position.y) / map.info.resolution);
-        //auto _x = int((__x - map.info.origin.position.x) / map.info.resolution);
-        //auto _y = int((__y - map.info.origin.position.y) / map.info.resolution);
-        //std::cout << "Circle: " << circle->center.x << " (" << __x * ycosI - __y * ysinI + txI << ") , " << circle->center.y << " (" << __x * ysinI + __y * ycosI + tyI << ") on grid: " << _x << " , " << _y << ": " << (_y * map.info.width + _x) << ":" << map.data.size() << std::endl;
-
-        if ((_y * map.info.width + _x) < map.data.size()) {
-            //map.data.at(_y * map.info.width + _x) = 100;
-            for (int x = -INFLATION; x < INFLATION; x++) {
-                if (x + _x < 0 || x + _x >= metadata.width) {
-                    continue;
-                }
-
-                for (int y = -INFLATION; y < INFLATION; y++) {
-                    if (y + _y < 0 || y + _y >= metadata.height) {
-                        continue;
-                    }
-
-                    if (x*x + y*y >= INFLATION * INFLATION) {
-                        continue;
-                    }
-
-                    map.data.at((y + _y) * map.info.width + (x + _x)) = 100;
-                }
-            }
-        }
-    }
 
     // Cut the map
-    // Car position
-    // txI, tyI
-    //std::cout << "Car at: " << txI << " , " << tyI << std::endl;
-
-    // Cell
-    //std::cout << "Cells: " << (txI - map.info.origin.position.x) / map.info.resolution << " , " << (tyI - map.info.origin.position.y) / map.info.resolution << std::endl;
     std::vector<int8_t> new_map;
 
     auto car_x = int((txI - map.info.origin.position.x) / map.info.resolution);
