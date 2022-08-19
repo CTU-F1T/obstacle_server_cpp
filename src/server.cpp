@@ -30,6 +30,7 @@ std::string ls_frame = "laser";
 bool delay_measure = false;
 
 // Map
+#define FIX_MAP_SIZE 1
 #define INFLATION 4
 #define LOCAL_MAP_WIDTH 50
 #define LOCAL_MAP_HEIGHT 50
@@ -374,18 +375,34 @@ void serverPublish() {
     auto real_width = std::min(int(map.info.width), car_x+LOCAL_MAP_WIDTH) - std::max(0, car_x - LOCAL_MAP_WIDTH);
     auto real_height = std::min(int(map.info.height), car_y + LOCAL_MAP_HEIGHT) - std::max(0, car_y - LOCAL_MAP_HEIGHT);
 
+#if FIX_MAP_SIZE
+    new_map.resize(4 * LOCAL_MAP_WIDTH * LOCAL_MAP_HEIGHT, 255);
+
+    int iter = 0;
+    for (int i = std::max(0, car_y - LOCAL_MAP_HEIGHT); i < std::min(int(map.info.height), car_y + LOCAL_MAP_HEIGHT); i++, iter++) {
+
+        //new_map.insert(new_map.end(), map.info.begin() + (i * map.info.width),
+        memcpy(&new_map[iter*2*LOCAL_MAP_WIDTH], &map.data[i * map.info.width + std::max(0, car_x - LOCAL_MAP_WIDTH)], real_width*sizeof(int8_t));
+    }
+    // FIXME: This will be probably off in one of the cases. Check on smaller map.
+    map.info.origin.position.x += (std::max(0, car_x - LOCAL_MAP_WIDTH) * map.info.resolution);
+    map.info.origin.position.y += (std::max(0, car_y - LOCAL_MAP_HEIGHT) * map.info.resolution);
+    map.info.width = 2 * LOCAL_MAP_WIDTH;
+    map.info.height = 2 * LOCAL_MAP_HEIGHT;
+#else
     new_map.resize(4 * (real_width) * (real_height));
 
     int iter = 0;
     for (int i = std::max(0, car_y - LOCAL_MAP_HEIGHT); i < std::min(int(map.info.height), car_y + LOCAL_MAP_HEIGHT); i++, iter++) {
         //new_map.insert(new_map.end(), map.info.begin() + (i * map.info.width),
-        memcpy(&new_map[iter*2*LOCAL_MAP_WIDTH], &map.data[i * map.info.width + std::max(0, car_x - LOCAL_MAP_WIDTH)], 2*real_width*sizeof(int8_t));
+        memcpy(&new_map[iter*real_width], &map.data[i * map.info.width + std::max(0, car_x - LOCAL_MAP_WIDTH)], real_width*sizeof(int8_t));
     }
 
     map.info.origin.position.x += (std::max(0, car_x - LOCAL_MAP_WIDTH) * map.info.resolution);
     map.info.origin.position.y += (std::max(0, car_y - LOCAL_MAP_HEIGHT) * map.info.resolution);
     map.info.width = real_width;
     map.info.height = real_height;
+#endif
     map.data = new_map;
 
     pub_os.publish(msg);
