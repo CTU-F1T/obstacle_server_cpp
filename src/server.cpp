@@ -9,22 +9,33 @@
 
 #include <chrono>
 #include <thread>
+#include <algorithm>
 
 #include "ros/ros.h"
 #include <tf/transform_listener.h>
 
 #include "sensor_msgs/LaserScan.h"
 #include "obstacle_msgs/ObstaclesStamped.h"
+#include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
 
 std::map<std::string, std::pair<std_msgs::Header, obstacle_msgs::Obstacles>> m;
 ros::Publisher pub_os;
+ros::Publisher pub_og;
 tf::TransformListener* listener;
 tf::StampedTransform transform;
 
 ros::Time latest;
 std::string ls_frame = "laser";
 bool delay_measure = false;
+
+// Map
+#define INFLATION 4
+#define LOCAL_MAP_WIDTH 50
+#define LOCAL_MAP_HEIGHT 50
+bool map_received = false;
+nav_msgs::MapMetaData metadata;
+std::vector<int8_t> saved_map;
 
 
 // TimeMeasurer
@@ -171,6 +182,41 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, event.getMessage()->obstacles);
 }
 
+// OccupancyGrid callback
+void ogCallback(const ros::MessageEvent<nav_msgs::OccupancyGrid const>& event) {
+    //saved_map = event.getMessage();
+    metadata = event.getMessage()->info;
+    saved_map = event.getMessage()->data;
+
+    for (int i = 0; i < metadata.width; i++) {
+        for (int j = 0; j < metadata.height; j++) {
+            if (event.getMessage()->data.at(j * metadata.width + i) > 50) {
+                for (int x = -INFLATION; x < INFLATION; x++) {
+                    if (x + i < 0 || x + i >= metadata.width) {
+                        continue;
+                    }
+
+                    for (int y = -INFLATION; y < INFLATION; y++) {
+                        if (y + j < 0 || y + j >= metadata.height) {
+                            continue;
+                        }
+
+                        if (x*x + y*y >= INFLATION * INFLATION) {
+                            continue;
+                        }
+
+                        auto current = saved_map.at((j + y) * metadata.width + x + i);
+
+                        if (current < event.getMessage()->data.at(j * metadata.width + i)) {
+                            saved_map.at((j + y) * metadata.width + x + i) = event.getMessage()->data.at(j * metadata.width + i);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 void serverPublish();
 
@@ -239,6 +285,15 @@ void serverPublish() {
     ysin = sin(yaw);
     ycos = cos(yaw);
 
+    // Inverse transformation
+    double rollI, pitchI, yawI, ysinI, ycosI, txI, tyI;
+    tf::Vector3 vecI = _transform.inverse().getOrigin();
+    txI = vecI.getX();
+    tyI = vecI.getY();
+    tf::Matrix3x3(tf::Quaternion(_transform.inverse().getRotation())).getRPY(rollI, pitchI, yawI);
+    ysinI = sin(yawI);
+    ycosI = cos(yawI);
+
     for (auto it = m.begin(); it != m.end(); ++it) {
         //std::cout << it->first << std::endl;
 
@@ -265,7 +320,76 @@ void serverPublish() {
     if (m.size() > 0 and latest.toSec() > 0) {
         dm_server.delay(latest);
     }
+
+    // OccupancyGrid
+    nav_msgs::OccupancyGrid map;
+    map.info = metadata;
+    map.data = saved_map;
+
+    double __x, __y;
+    for (auto circle = msg.obstacles.circles.begin(); circle != msg.obstacles.circles.end(); ++circle) {
+        __x = circle->center.x;
+        __y = circle->center.y;
+
+        auto _x = int((__x * ycosI - __y * ysinI + txI - map.info.origin.position.x) / map.info.resolution);
+        auto _y = int((__x * ysinI + __y * ycosI + tyI - map.info.origin.position.y) / map.info.resolution);
+        //auto _x = int((__x - map.info.origin.position.x) / map.info.resolution);
+        //auto _y = int((__y - map.info.origin.position.y) / map.info.resolution);
+        //std::cout << "Circle: " << circle->center.x << " (" << __x * ycosI - __y * ysinI + txI << ") , " << circle->center.y << " (" << __x * ysinI + __y * ycosI + tyI << ") on grid: " << _x << " , " << _y << ": " << (_y * map.info.width + _x) << ":" << map.data.size() << std::endl;
+
+        if ((_y * map.info.width + _x) < map.data.size()) {
+            //map.data.at(_y * map.info.width + _x) = 100;
+            for (int x = -INFLATION; x < INFLATION; x++) {
+                if (x + _x < 0 || x + _x >= metadata.width) {
+                    continue;
+                }
+
+                for (int y = -INFLATION; y < INFLATION; y++) {
+                    if (y + _y < 0 || y + _y >= metadata.height) {
+                        continue;
+                    }
+
+                    if (x*x + y*y >= INFLATION * INFLATION) {
+                        continue;
+                    }
+
+                    map.data.at((y + _y) * map.info.width + (x + _x)) = 100;
+                }
+            }
+        }
+    }
+
+    // Cut the map
+    // Car position
+    // txI, tyI
+    //std::cout << "Car at: " << txI << " , " << tyI << std::endl;
+
+    // Cell
+    //std::cout << "Cells: " << (txI - map.info.origin.position.x) / map.info.resolution << " , " << (tyI - map.info.origin.position.y) / map.info.resolution << std::endl;
+    std::vector<int8_t> new_map;
+
+    auto car_x = int((txI - map.info.origin.position.x) / map.info.resolution);
+    auto car_y = int((tyI - map.info.origin.position.y) / map.info.resolution);
+
+    auto real_width = std::min(int(map.info.width), car_x+LOCAL_MAP_WIDTH) - std::max(0, car_x - LOCAL_MAP_WIDTH);
+    auto real_height = std::min(int(map.info.height), car_y + LOCAL_MAP_HEIGHT) - std::max(0, car_y - LOCAL_MAP_HEIGHT);
+
+    new_map.resize(4 * (real_width) * (real_height));
+
+    int iter = 0;
+    for (int i = std::max(0, car_y - LOCAL_MAP_HEIGHT); i < std::min(int(map.info.height), car_y + LOCAL_MAP_HEIGHT); i++, iter++) {
+        //new_map.insert(new_map.end(), map.info.begin() + (i * map.info.width),
+        memcpy(&new_map[iter*2*LOCAL_MAP_WIDTH], &map.data[i * map.info.width + std::max(0, car_x - LOCAL_MAP_WIDTH)], 2*real_width*sizeof(int8_t));
+    }
+
+    map.info.origin.position.x += (std::max(0, car_x - LOCAL_MAP_WIDTH) * map.info.resolution);
+    map.info.origin.position.y += (std::max(0, car_y - LOCAL_MAP_HEIGHT) * map.info.resolution);
+    map.info.width = real_width;
+    map.info.height = real_height;
+    map.data = new_map;
+
     pub_os.publish(msg);
+    pub_og.publish(map);
 }
 
 // Periodic listener
@@ -327,13 +451,17 @@ int main(int argc, char **argv) {
      *  - ObstaclesStamped
      *  - Obstacles (TBI)
      *  - LaserScan
+     *
+     * In addition we want to obtain and publish OccupancyGrid with all the obstacles.
      */
     ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
     listener = new(tf::TransformListener); // Cannot be global as it leads to "call init first"
     ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback, ros::TransportHints().tcpNoDelay());
+    ros::Subscriber sub_og = n.subscribe("/map_static", 1, ogCallback);
 
     // Publishers
     pub_os = n.advertise<obstacle_msgs::ObstaclesStamped>("/obstacles_out", 1);
+    pub_og = n.advertise<nav_msgs::OccupancyGrid>("/map/local", 1);
 
     // Timers
     //ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
