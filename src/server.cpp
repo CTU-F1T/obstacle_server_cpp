@@ -191,7 +191,7 @@ void ogCallback(const ros::MessageEvent<nav_msgs::OccupancyGrid const>& event) {
 
     for (int i = 0; i < metadata.width; i++) {
         for (int j = 0; j < metadata.height; j++) {
-            if (event.getMessage()->data.at(j * metadata.width + i) > 50) {
+            if (event.getMessage()->data.at(j * metadata.width + i) > 50 && event.getMessage()->data.at(j * metadata.width + i) <= 100) {
                 for (int x = -INFLATION; x < INFLATION; x++) {
                     if (x + i < 0 || x + i >= metadata.width) {
                         continue;
