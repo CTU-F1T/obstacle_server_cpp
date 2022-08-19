@@ -483,7 +483,8 @@ int main(int argc, char **argv) {
     // Timers
     //ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
     ros::Timer tim_transform = n.createTimer(ros::Duration(0.01), transformListener);
-    if (delay_measure) ros::Timer tim_summary = n.createTimer(ros::Duration(2), printSummary);
+    ros::Timer tim_summary;
+    if (delay_measure) tim_summary = n.createTimer(ros::Duration(2), printSummary);
 
     // Spin
     ros::spin();
