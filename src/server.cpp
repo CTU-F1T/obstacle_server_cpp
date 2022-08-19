@@ -31,7 +31,8 @@ bool delay_measure = false;
 
 // Map
 #define FIX_MAP_SIZE 1
-#define INFLATION 4
+// All of these are multiplied by 2.
+#define INFLATION 6
 #define LOCAL_MAP_WIDTH 50
 #define LOCAL_MAP_HEIGHT 50
 bool map_received = false;
@@ -378,15 +379,15 @@ void serverPublish() {
 #if FIX_MAP_SIZE
     new_map.resize(4 * LOCAL_MAP_WIDTH * LOCAL_MAP_HEIGHT, 255);
 
-    int iter = 0;
+    int iter = std::max(0, LOCAL_MAP_HEIGHT - car_y);
     for (int i = std::max(0, car_y - LOCAL_MAP_HEIGHT); i < std::min(int(map.info.height), car_y + LOCAL_MAP_HEIGHT); i++, iter++) {
 
         //new_map.insert(new_map.end(), map.info.begin() + (i * map.info.width),
-        memcpy(&new_map[iter*2*LOCAL_MAP_WIDTH], &map.data[i * map.info.width + std::max(0, car_x - LOCAL_MAP_WIDTH)], real_width*sizeof(int8_t));
+        memcpy(&new_map[iter*2*LOCAL_MAP_WIDTH + std::max(0, LOCAL_MAP_WIDTH - car_x)], &map.data[i * map.info.width + std::max(0, car_x - LOCAL_MAP_WIDTH)], real_width*sizeof(int8_t));
     }
-    // FIXME: This will be probably off in one of the cases. Check on smaller map.
-    map.info.origin.position.x += (std::max(0, car_x - LOCAL_MAP_WIDTH) * map.info.resolution);
-    map.info.origin.position.y += (std::max(0, car_y - LOCAL_MAP_HEIGHT) * map.info.resolution);
+
+    map.info.origin.position.x += (car_x - LOCAL_MAP_WIDTH) * map.info.resolution;
+    map.info.origin.position.y += (car_y - LOCAL_MAP_HEIGHT) * map.info.resolution;
     map.info.width = 2 * LOCAL_MAP_WIDTH;
     map.info.height = 2 * LOCAL_MAP_HEIGHT;
 #else
