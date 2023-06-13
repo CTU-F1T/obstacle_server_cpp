@@ -18,6 +18,14 @@
 #include "obstacle_msgs/ObstaclesStamped.h"
 #include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
+#include "std_msgs/Header.h"
+
+using namespace ros;
+using namespace tf;
+using namespace sensor_msgs;
+using namespace obstacle_msgs;
+using namespace nav_msgs;
+//using namespace std_msgs; // In confict with ros::Header
 
 std::map<std::string, std::pair<std_msgs::Header, obstacle_msgs::Obstacles>> m;
 ros::Publisher pub_os;
@@ -36,7 +44,7 @@ bool delay_measure = false;
 #define LOCAL_MAP_WIDTH 50
 #define LOCAL_MAP_HEIGHT 50
 bool map_received = false;
-nav_msgs::MapMetaData metadata;
+MapMetaData metadata;
 std::vector<int8_t> saved_map;
 
 
@@ -115,7 +123,7 @@ class DelayMeasurer {
     private:
         std::string _name = "";
         std::string _unit = "";
-        ros::Time _start;
+        Time _start;
         int _count = 0;
         double _sum = 0;
         double _max = 0;
@@ -150,7 +158,7 @@ class DelayMeasurer {
                 this->delay(header.stamp);
         }
 
-        void delay(ros::Time stamp) {
+        void delay(Time stamp) {
             if (!delay_measure) return;
 
             if (this->_unit == "s") {
@@ -180,7 +188,7 @@ class DelayMeasurer {
 
 
 // Inflation utility
-void inflateObstacle(nav_msgs::OccupancyGrid* map, int _x, int _y, double radius = 0.0) {
+void inflateObstacle(OccupancyGrid* map, int _x, int _y, double radius = 0.0) {
     if ((_y * map->info.width + _x) < map->data.size()) {
         //map.data.at(_y * map.info.width + _x) = 100;
 
@@ -218,13 +226,14 @@ void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& 
 
 // OccupancyGrid callback
 void ogCallback(const ros::MessageEvent<nav_msgs::OccupancyGrid const>& event) {
-    //saved_map = event.getMessage();
-    metadata = event.getMessage()->info;
-    saved_map = event.getMessage()->data;
+    nav_msgs::OccupancyGrid::ConstPtr message = event.getMessage();
+    //saved_map = message;
+    metadata = message->info;
+    saved_map = message->data;
 
     for (int i = 0; i < metadata.width; i++) {
         for (int j = 0; j < metadata.height; j++) {
-            if (event.getMessage()->data.at(j * metadata.width + i) > 50 && event.getMessage()->data.at(j * metadata.width + i) <= 100) {
+            if (message->data.at(j * metadata.width + i) > 50 && message->data.at(j * metadata.width + i) <= 100) {
                 for (int x = -INFLATION; x < INFLATION; x++) {
                     if (x + i < 0 || x + i >= metadata.width) {
                         continue;
@@ -241,8 +250,8 @@ void ogCallback(const ros::MessageEvent<nav_msgs::OccupancyGrid const>& event) {
 
                         auto current = saved_map.at((j + y) * metadata.width + x + i);
 
-                        if (current < event.getMessage()->data.at(j * metadata.width + i)) {
-                            saved_map.at((j + y) * metadata.width + x + i) = event.getMessage()->data.at(j * metadata.width + i);
+                        if (current < message->data.at(j * metadata.width + i)) {
+                            saved_map.at((j + y) * metadata.width + x + i) = message->data.at(j * metadata.width + i);
                         }
                     }
                 }
@@ -260,31 +269,35 @@ DelayMeasurer dm_laserscan("scandelay", "ms");
 
 // LaserScan callback
 void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
-    dm_laserscanstart.delay(event.getMessage()->header.stamp);
+    sensor_msgs::LaserScan::ConstPtr message = event.getMessage();
+    dm_laserscanstart.delay(message->header.stamp);
     tm_laserscan.start();
-    boost::shared_ptr<obstacle_msgs::ObstaclesStamped> os(new obstacle_msgs::ObstaclesStamped);
-    //std::vector<obstacle_msgs::CircleObstacle> obs(event.getMessage()->ranges.size());
-    os->obstacles.circles.reserve(event.getMessage()->ranges.size());
+
+    std::shared_ptr<ObstaclesStamped> os(new ObstaclesStamped);
+    //std::vector<CircleObstacle> obs(message->ranges.size());
+    os->obstacles.circles.reserve(message->ranges.size());
+
 
     // Convert LaserScan to CircleObstacle[]
     // TODO: Use std::transform
-    for (float angle = event.getMessage()->angle_min, i = 0; i < event.getMessage()->ranges.size(); angle += event.getMessage()->angle_increment, i++) {
-        obstacle_msgs::CircleObstacle circle;
-        circle.center.x = cos(angle) * event.getMessage()->ranges.at(i);
-        circle.center.y = sin(angle) * event.getMessage()->ranges.at(i);
+    int i;
+    for (float angle = message->angle_min, i = 0; i < message->ranges.size(); angle += message->angle_increment, i++) {
+        CircleObstacle circle;
+        circle.center.x = cos(angle) * message->ranges.at(i);
+        circle.center.y = sin(angle) * message->ranges.at(i);
         circle.radius = 0.01;
         os->obstacles.circles.emplace_back(circle);
     }
 
     // Remember frame id
-    ls_frame = event.getMessage()->header.frame_id;
+    ls_frame = message->header.frame_id;
 
     // Store scan
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, os->obstacles);
-    latest = event.getMessage()->header.stamp;
+    latest = message->header.stamp;
 
     tm_laserscan.end();
-    dm_laserscan.delay(event.getMessage()->header.stamp);
+    dm_laserscan.delay(message->header.stamp);
 
     serverPublish();
 }
@@ -303,7 +316,7 @@ void serverPublish() {
     tm_server.start();
     //std::cout << "Currently logged sources: " << m.size() << std::endl;
 
-    obstacle_msgs::ObstaclesStamped msg;
+    ObstaclesStamped msg;
     msg.header.stamp = ros::Time::now();
     msg.header.frame_id = ls_frame;
 
@@ -312,24 +325,25 @@ void serverPublish() {
     tf::StampedTransform _transform(transform);
 
     double roll, pitch, yaw, ysin, ycos, tx, ty;
-    tf::Vector3 vec = _transform.getOrigin();
+    Vector3 vec = _transform.getOrigin();
     tx = vec.getX();
     ty = vec.getY();
-    tf::Matrix3x3(tf::Quaternion(_transform.getRotation())).getRPY(roll, pitch, yaw);
+    Matrix3x3(Quaternion(_transform.getRotation())).getRPY(roll, pitch, yaw);
     ysin = sin(yaw);
     ycos = cos(yaw);
 
     // Inverse transformation
     double rollI, pitchI, yawI, ysinI, ycosI, txI, tyI;
-    tf::Vector3 vecI = _transform.inverse().getOrigin();
+    Vector3 vecI = _transform.inverse().getOrigin();
     txI = vecI.getX();
     tyI = vecI.getY();
-    tf::Matrix3x3(tf::Quaternion(_transform.inverse().getRotation())).getRPY(rollI, pitchI, yawI);
+    Matrix3x3(Quaternion(_transform.inverse().getRotation())).getRPY(rollI, pitchI, yawI);
     ysinI = sin(yawI);
     ycosI = cos(yawI);
 
     // OccupancyGrid
-    nav_msgs::OccupancyGrid map;
+    OccupancyGrid map;
+    map.header.frame_id = "map";
     map.info = metadata;
     map.data = saved_map;
 
