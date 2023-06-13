@@ -7,10 +7,12 @@
   <arg name="/scan" default="" doc="Topic for remapping the '/scan'." />
   <arg name="/obstacles_in" default="" doc="Topic for remapping the '/obstacles_in'." />
   <arg name="/obstacles_out" default="" doc="Topic for remapping the '/obstacles_out'." />
+  <arg name="/map_static" default="" doc="Topic for remapping the '/map_static'." />
 
   <node pkg="obstacle_server_cpp" type="obstacle_server_cpp_node" name="obstacle_server_cpp" output="screen">
     <remap from="/scan" to="$(arg /scan)" if="$(eval arg('/scan') != '')" />
     <remap from="/obstacles_in" to="$(arg /obstacles_in)" if="$(eval arg('/obstacles_in') != '')" />
     <remap from="/obstacles_out" to="$(arg /obstacles_out)" if="$(eval arg('/obstacles_out') != '')" />
+    <remap from="/map_static" to="$(arg /map_static)" if="$(eval arg('/map_static') != '')" />
   </node>
 </launch>

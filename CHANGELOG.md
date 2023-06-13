@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## Unreleased
+## 0.2.0 - 2023-06-13
+### Added
+- Publish local map to `/map/local`.
+- ROS2 support.
+- Parameters `~frame_id` and `~child_frame_id` for the transform listener.
+
 ## 0.1.1 - 2022-08-18
 ### Fixed
 - Added missing `roscpp` dependency to the package manifest.

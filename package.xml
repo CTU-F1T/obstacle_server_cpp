@@ -4,7 +4,7 @@
   schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>obstacle_server_cpp</name>
-  <version>0.1.1</version>
+  <version>0.2.0</version>
   <description>
     An implementation of obstacle server in C++.
   </description>
@@ -17,27 +17,38 @@
 
   <url type="repository">https://github.com/CTU-F1T/obstacle_server_cpp</url>
 
-  <buildtool_depend>catkin</buildtool_depend>
+  <buildtool_depend condition="$ROS_VERSION == 1">catkin</buildtool_depend>
 
   <!-- build_depend libraries -->
-  <build_depend>roscpp</build_depend>
-  <build_depend>tf</build_depend>
+  <build_depend condition="$ROS_VERSION == 1">roscpp</build_depend>
+  <build_depend condition="$ROS_VERSION == 2">rclcpp</build_depend>
+  <build_depend condition="$ROS_VERSION == 1">tf</build_depend>
+  <build_depend condition="$ROS_VERSION == 2">tf2</build_depend>
 
   <!-- build_depend message types -->
   <build_depend>obstacle_msgs</build_depend>
   <build_depend>std_msgs</build_depend>
   <build_depend>sensor_msgs</build_depend>
+  <build_depend>nav_msgs</build_depend>
 
   <!-- exec_depend libraries -->
-  <exec_depend>roscpp</exec_depend>
-  <exec_depend>tf</exec_depend>
+  <exec_depend condition="$ROS_VERSION == 1">roscpp</exec_depend>
+  <exec_depend condition="$ROS_VERSION == 2">rclcpp</exec_depend>
+  <exec_depend condition="$ROS_VERSION == 1">tf</exec_depend>
+  <exec_depend condition="$ROS_VERSION == 2">tf2</exec_depend>
 
   <!-- exec_depend message types -->
   <exec_depend>obstacle_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
 
   <export>
     <index url="git@github.com:CTU-F1T/obstacle_server_cpp.git" />
+
+    <!-- Should not be required (as ROS1 defaults to catkin), but with the other dependency it is completely lost. -->
+    <build_type condition="$ROS_VERSION == 1">catkin</build_type>
+    <!-- ROS2 Build type -->
+    <build_type condition="$ROS_VERSION == 2">ament_cmake</build_type>
   </export>
 </package>
