@@ -11,6 +11,7 @@
 #include <thread>
 #include <algorithm>
 
+#if ROS1_BUILD
 #include "ros/ros.h"
 #include <tf/transform_listener.h>
 
@@ -34,6 +35,37 @@ tf::TransformListener* listener;
 tf::StampedTransform transform;
 
 ros::Time latest;
+#elif ROS2_BUILD
+#include "rclcpp/rclcpp.hpp"
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/buffer.h"
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
+
+#include "sensor_msgs/msg/laser_scan.hpp"
+#include "obstacle_msgs/msg/obstacles_stamped.hpp"
+#include "nav_msgs/msg/map_meta_data.hpp"
+#include "nav_msgs/msg/occupancy_grid.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "std_msgs/msg/header.hpp"
+
+using namespace rclcpp;
+using namespace tf2;
+using namespace sensor_msgs::msg;
+using namespace obstacle_msgs::msg;
+using namespace nav_msgs::msg;
+using namespace std_msgs::msg;
+
+rclcpp::Node::SharedPtr n;
+
+std::map<std::string, std::pair<std_msgs::msg::Header, obstacle_msgs::msg::Obstacles>> m;
+rclcpp::Publisher<obstacle_msgs::msg::ObstaclesStamped>::SharedPtr pub_os;
+rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_og;
+std::shared_ptr<tf2_ros::TransformListener> listener{nullptr};
+std::unique_ptr<tf2_ros::Buffer> buffer;
+geometry_msgs::msg::TransformStamped transform;
+
+rclcpp::Time latest;
+#endif // ROS2_BUILD
 std::string ls_frame = "laser";
 bool delay_measure = false;
 
@@ -153,7 +185,11 @@ class DelayMeasurer {
 
         ~DelayMeasurer(){};
 
+#if ROS1_BUILD
         void delay(std_msgs::Header header) {
+#elif ROS2_BUILD
+        void delay(Header header) {
+#endif // ROS2_BUILD
             if (delay_measure)
                 this->delay(header.stamp);
         }
@@ -161,6 +197,7 @@ class DelayMeasurer {
         void delay(Time stamp) {
             if (!delay_measure) return;
 
+#if ROS1_BUILD
             if (this->_unit == "s") {
                 this->_last = (ros::Time::now() - stamp).toSec();
             } else if (this->_unit == "ms") {
@@ -172,6 +209,19 @@ class DelayMeasurer {
             } else {
                 this->_last = (ros::Time::now() - stamp).toSec();
             }
+#elif ROS2_BUILD
+            if (this->_unit == "s") {
+                this->_last = (n->get_clock()->now() - stamp).seconds();
+            } else if (this->_unit == "ms") {
+                this->_last = (n->get_clock()->now() - stamp).seconds() * 1000;
+            } else if (this->_unit == "us") {
+                this->_last = (n->get_clock()->now() - stamp).seconds() * 1000000;
+            } else if (this->_unit == "ns") {
+                this->_last = (n->get_clock()->now() - stamp).nanoseconds();
+            } else {
+                this->_last = (n->get_clock()->now() - stamp).seconds();
+            }
+#endif // ROS2_BUILD
 
             this->updateStatistics();
         }
@@ -220,13 +270,23 @@ void inflateObstacle(OccupancyGrid* map, int _x, int _y, double radius = 0.0) {
 
 
 // Obstacles callback
+#if ROS1_BUILD
 void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& event) {
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, event.getMessage()->obstacles);
 }
+#elif ROS2_BUILD
+void osCallback(obstacle_msgs::msg::ObstaclesStamped::ConstSharedPtr message) {
+    m["obstacles"] = std::pair<std_msgs::msg::Header, obstacle_msgs::msg::Obstacles>(message->header, message->obstacles);
+}
+#endif
 
 // OccupancyGrid callback
+#if ROS1_BUILD
 void ogCallback(const ros::MessageEvent<nav_msgs::OccupancyGrid const>& event) {
     nav_msgs::OccupancyGrid::ConstPtr message = event.getMessage();
+#elif ROS2_BUILD
+void ogCallback(nav_msgs::msg::OccupancyGrid::ConstSharedPtr message) {
+#endif // ROS2_BUILD
     //saved_map = message;
     metadata = message->info;
     saved_map = message->data;
@@ -268,8 +328,12 @@ DelayMeasurer dm_laserscanstart("scandelay_start", "ms");
 DelayMeasurer dm_laserscan("scandelay", "ms");
 
 // LaserScan callback
+#if ROS1_BUILD
 void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
     sensor_msgs::LaserScan::ConstPtr message = event.getMessage();
+#elif ROS2_BUILD
+void lsCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr message) {
+#endif // ROS2_BUILD
     dm_laserscanstart.delay(message->header.stamp);
     tm_laserscan.start();
 
@@ -293,7 +357,11 @@ void lsCallback(const ros::MessageEvent<sensor_msgs::LaserScan const>& event) {
     ls_frame = message->header.frame_id;
 
     // Store scan
+#if ROS1_BUILD
     m[event.getConnectionHeader()["callerid"].c_str()] = std::pair<std_msgs::Header, obstacle_msgs::Obstacles>(event.getMessage()->header, os->obstacles);
+#elif ROS2_BUILD
+    m["scan"] = std::pair<std_msgs::msg::Header, obstacle_msgs::msg::Obstacles>(message->header, os->obstacles);
+#endif
     latest = message->header.stamp;
 
     tm_laserscan.end();
@@ -310,19 +378,32 @@ DelayMeasurer dm_server("serverdelay", "ms");
 // Periodic publisher
 //void serverPublish(const ros::TimerEvent&) {
 void serverPublish() {
+#if ROS1_BUILD
     if (m.size() > 0 and latest.toSec() > 0) {
+#elif ROS2_BUILD
+    if (m.size() > 0 and latest.seconds() > 0) {
+#endif // ROS2_BUILD
         dm_serverstart.delay(latest);
     }
     tm_server.start();
     //std::cout << "Currently logged sources: " << m.size() << std::endl;
 
     ObstaclesStamped msg;
+#if ROS1_BUILD
     msg.header.stamp = ros::Time::now();
+#elif ROS2_BUILD
+    msg.header.stamp = n->get_clock()->now();
+#endif // ROS2_BUILD
     msg.header.frame_id = ls_frame;
 
     // Hold onto transformation
     // It is better to do it here as we don't use every transformation.
+#if ROS1_BUILD
     tf::StampedTransform _transform(transform);
+#elif ROS2_BUILD
+    tf2::Stamped<tf2::Transform> _transform;
+    tf2::fromMsg(transform, _transform);
+#endif // ROS2_BUILD
 
     double roll, pitch, yaw, ysin, ycos, tx, ty;
     Vector3 vec = _transform.getOrigin();
@@ -343,6 +424,9 @@ void serverPublish() {
 
     // OccupancyGrid
     OccupancyGrid map;
+#if ROS2_BUILD
+    map.header.stamp = n->get_clock()->now();
+#endif // ROS2_BUILD
     map.header.frame_id = "map";
     map.info = metadata;
     map.data = saved_map;
@@ -380,7 +464,11 @@ void serverPublish() {
     }
 
     tm_server.end();
+#if ROS1_BUILD
     if (m.size() > 0 and latest.toSec() > 0) {
+#elif ROS2_BUILD
+    if (m.size() > 0 and latest.seconds() > 0) {
+#endif // ROS2_BUILD
         dm_server.delay(latest);
     }
 
@@ -424,11 +512,17 @@ void serverPublish() {
 #endif
     map.data = new_map;
 
+#if ROS1_BUILD
     pub_os.publish(msg);
     pub_og.publish(map);
+#elif ROS2_BUILD
+    pub_os->publish(msg);
+    pub_og->publish(map);
+#endif // ROS2_BUILD
 }
 
 // Periodic listener
+#if ROS1_BUILD
 void transformListener(const ros::TimerEvent&) {
     try {
         listener->lookupTransform("/base_link", "/map", ros::Time(0), transform);
@@ -436,10 +530,23 @@ void transformListener(const ros::TimerEvent&) {
         //ROS_ERROR("%s", ex.what());
     }
 }
+#elif ROS2_BUILD
+void transformListener() {
+    try {
+        transform = buffer->lookupTransform("/base_link", "/map", tf2::TimePointZero);
+    } catch (tf2::TransformException &ex) {
+        //RCLCPP_ERROR("%s", ex.what());
+    }
+}
+#endif // ROS2_BUILD
 
 
 // Periodically print summary
+#if ROS1_BUILD
 void printSummary(const ros::TimerEvent&) {
+#elif ROS2_BUILD
+void printSummary() {
+#endif // ROS2_BUILD
     std::cout << tm_laserscan << std::endl;
     std::cout << tm_server << std::endl;
     std::cout << dm_laserscanstart << std::endl;
@@ -450,6 +557,7 @@ void printSummary(const ros::TimerEvent&) {
 
 
 // Main function
+#if ROS1_BUILD
 int main(int argc, char **argv) {
     // Initialization and passing of remappings
     ros::init(argc, argv, "obstacle_server_cpp");
@@ -510,3 +618,76 @@ int main(int argc, char **argv) {
 
     return 0;
 }
+#elif ROS2_BUILD
+int main(int argc, char **argv) {
+    // Initialization and passing of remappings
+    rclcpp::init(argc, argv);
+
+    // NodeHandle -- access point to communications within ROS
+    n = rclcpp::Node::make_shared("obstacle_server_cpp");
+
+    /* Obtain parameters
+     *
+     * /delay_measure -- when true, timing is performed
+     */
+    n->declare_parameter("delay_measure", ParameterValue(false));
+
+    /* Simulated time workaround
+     *
+     * When using simulated time (e.g. Stage), Time::now() returns
+     * value 0 until something was received from '/clock'. So, we
+     * will wait for it.
+     *
+     * Side note: On the other hand, when running Stage, sometimes
+     * the messages arrive from the future. :(
+     */
+    while (rclcpp::ok()) {
+        if ( n->get_clock()->now().nanoseconds() == 0 ) {
+            RCLCPP_WARN(n->get_logger(), "Current time is 0. Waiting for it to change.");
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        } else {
+            break;
+        }
+    }
+
+    /* Subscribers
+     *
+     * Obstacle server should be compatible with various message types, like:
+     *  - ObstaclesStamped
+     *  - Obstacles (TBI)
+     *  - LaserScan
+     *
+     * In addition we want to obtain and publish OccupancyGrid with all the obstacles.
+     */
+    auto sub_os = n->create_subscription<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_in", rclcpp::QoS(5).best_effort().durability_volatile(), osCallback);
+    buffer = std::make_unique<tf2_ros::Buffer>(n->get_clock());
+    listener = std::make_shared<tf2_ros::TransformListener>(*buffer); // Cannot be global as it leads to "call init first"
+    auto sub_ls = n->create_subscription<sensor_msgs::msg::LaserScan>("/scan", rclcpp::QoS(1).best_effort().durability_volatile(), lsCallback);//, rclcpp::TransportHints().tcpNoDelay());
+    auto sub_og = n->create_subscription<nav_msgs::msg::OccupancyGrid>("/map_static", rclcpp::QoS(1).reliable().transient_local(), ogCallback);
+
+    // Publishers
+    pub_os = n->create_publisher<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_out", rclcpp::QoS(1).best_effort().durability_volatile());
+    pub_og = n->create_publisher<nav_msgs::msg::OccupancyGrid>("/map/local", rclcpp::QoS(1).best_effort().durability_volatile());
+
+    // Timers
+    //rclcpp::Timer tim_obstacles = n.createTimer(rclcpp::Duration(0.025), serverPublish);
+    rclcpp::TimerBase::SharedPtr tim_transform {nullptr};
+    // Call transformListener function every 10ms
+    //tim_transform = n->create_wall_timer(10ms, transformListener);
+    tim_transform = create_timer(n, n->get_clock(), rclcpp::Duration::from_seconds(0.025), &serverPublish);
+
+    //rclcpp::Timer tim_summary;
+    rclcpp::TimerBase::SharedPtr tim_summary {nullptr};
+    // Call printSummary function every other second
+    delay_measure = n->get_parameter("delay_measure").as_bool();
+    if (delay_measure) {
+        tim_summary = create_timer(n, n->get_clock(), rclcpp::Duration::from_seconds(2.0), &printSummary);
+    }
+
+    // Spin
+    rclcpp::spin(n);
+    rclcpp::shutdown();
+
+    return 0;
+}
+#endif // ROS2_BUILD
