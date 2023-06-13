@@ -32,7 +32,6 @@ set(dep_ros2_pkgs
     tf2_geometry_msgs
 )
 
-add_executable(${PROJECT_NAME}_node src/server.cpp)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -57,6 +56,8 @@ include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 
+add_executable(${PROJECT_NAME}_node src/server.cpp)
+
 add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 target_link_libraries(${PROJECT_NAME}_node
@@ -64,19 +65,26 @@ target_link_libraries(${PROJECT_NAME}_node
 )
 elseif (ROS_VERSION EQUAL 2)
 add_definitions(-DROS2_BUILD)
-    find_package(ament_cmake REQUIRED)
-    find_package(rclcpp REQUIRED)
-    foreach (pkg ${dep_pkgs})
-        find_package(${pkg} REQUIRED)
-    endforeach()
-    foreach (pkg ${dep_ros2_pkgs})
-        find_package(${pkg} REQUIRED)
-    endforeach()
-    ament_target_dependencies(${PROJECT_NAME}_node
-      rclcpp
-      ${dep_pkgs}
-      ${dep_ros2_pkgs}
-    )
+
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+
+foreach (pkg ${dep_pkgs})
+    find_package(${pkg} REQUIRED)
+endforeach()
+
+foreach (pkg ${dep_ros2_pkgs})
+    find_package(${pkg} REQUIRED)
+endforeach()
+
+add_executable(${PROJECT_NAME}_node src/server.cpp)
+
+ament_target_dependencies(${PROJECT_NAME}_node
+  rclcpp
+  ${dep_pkgs}
+  ${dep_ros2_pkgs}
+)
+
 install(
   TARGETS ${PROJECT_NAME}_node
   DESTINATION lib/${PROJECT_NAME}
