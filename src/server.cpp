@@ -674,7 +674,7 @@ int main(int argc, char **argv) {
     rclcpp::TimerBase::SharedPtr tim_transform {nullptr};
     // Call transformListener function every 10ms
     //tim_transform = n->create_wall_timer(10ms, transformListener);
-    tim_transform = create_timer(n, n->get_clock(), rclcpp::Duration::from_seconds(0.025), &serverPublish);
+    tim_transform = create_timer(n, n->get_clock(), rclcpp::Duration::from_seconds(0.01), &transformListener);
 
     //rclcpp::Timer tim_summary;
     rclcpp::TimerBase::SharedPtr tim_summary {nullptr};
