@@ -68,6 +68,8 @@ rclcpp::Time latest;
 #endif // ROS2_BUILD
 std::string ls_frame = "laser";
 bool delay_measure = false;
+std::string frame_id = "/map";
+std::string child_frame_id = "/base_link";
 
 // Map
 #define FIX_MAP_SIZE 1
@@ -525,7 +527,7 @@ void serverPublish() {
 #if ROS1_BUILD
 void transformListener(const ros::TimerEvent&) {
     try {
-        listener->lookupTransform("/base_link", "/map", ros::Time(0), transform);
+        listener->lookupTransform(child_frame_id, frame_id, ros::Time(0), transform);
     } catch (tf::TransformException &ex) {
         //ROS_ERROR("%s", ex.what());
     }
@@ -533,9 +535,9 @@ void transformListener(const ros::TimerEvent&) {
 #elif ROS2_BUILD
 void transformListener() {
     try {
-        transform = buffer->lookupTransform("/base_link", "/map", tf2::TimePointZero);
+        transform = buffer->lookupTransform(child_frame_id, frame_id, tf2::TimePointZero);
     } catch (tf2::TransformException &ex) {
-        //RCLCPP_ERROR("%s", ex.what());
+        //RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "%s", ex.what());
     }
 }
 #endif // ROS2_BUILD
@@ -564,12 +566,15 @@ int main(int argc, char **argv) {
 
     // NodeHandle -- access point to communications within ROS
     ros::NodeHandle n;
+    ros::NodeHandle n_private("~");
 
     /* Obtain parameters
      *
      * /delay_measure -- when true, timing is performed
      */
     n.getParam("delay_measure", delay_measure);
+    n_private.getParam("frame_id", frame_id);
+    n_private.getParam("child_frame_id", child_frame_id);
 
     /* Simulated time workaround
      *
@@ -631,6 +636,12 @@ int main(int argc, char **argv) {
      * /delay_measure -- when true, timing is performed
      */
     n->declare_parameter("delay_measure", ParameterValue(false));
+    n->declare_parameter("frame_id", ParameterValue(frame_id));
+    n->declare_parameter("child_frame_id", ParameterValue(child_frame_id));
+
+    delay_measure = n->get_parameter("delay_measure").as_bool();
+    frame_id = n->get_parameter("frame_id").as_string();
+    child_frame_id = n->get_parameter("child_frame_id").as_string();
 
     /* Simulated time workaround
      *
@@ -679,7 +690,6 @@ int main(int argc, char **argv) {
     //rclcpp::Timer tim_summary;
     rclcpp::TimerBase::SharedPtr tim_summary {nullptr};
     // Call printSummary function every other second
-    delay_measure = n->get_parameter("delay_measure").as_bool();
     if (delay_measure) {
         tim_summary = create_timer(n, n->get_clock(), rclcpp::Duration::from_seconds(2.0), &printSummary);
     }
