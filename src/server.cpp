@@ -529,7 +529,7 @@ void transformListener(const ros::TimerEvent&) {
     try {
         listener->lookupTransform(child_frame_id, frame_id, ros::Time(0), transform);
     } catch (tf::TransformException &ex) {
-        //ROS_ERROR("%s", ex.what());
+        ROS_ERROR("%s", ex.what());
     }
 }
 #elif ROS2_BUILD
@@ -537,7 +537,7 @@ void transformListener() {
     try {
         transform = buffer->lookupTransform(child_frame_id, frame_id, tf2::TimePointZero);
     } catch (tf2::TransformException &ex) {
-        //RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "%s", ex.what());
+        RCLCPP_ERROR(rclcpp::get_logger("obstacle_server_cpp"), "%s", ex.what());
     }
 }
 #endif // ROS2_BUILD
