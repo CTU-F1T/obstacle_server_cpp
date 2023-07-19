@@ -78,6 +78,7 @@ std::string child_frame_id = "/base_link";
 
 // Map
 #define FIX_MAP_SIZE 1
+#define ROTATE_LOCAL_MAP 1
 // All of these are multiplied by 2.
 #define INFLATION 6
 #define LOCAL_MAP_WIDTH 50
@@ -516,6 +517,18 @@ void serverPublish() {
     map.info.origin.position.y += (std::max(0, car_y - LOCAL_MAP_HEIGHT) * map.info.resolution);
     map.info.width = real_width;
     map.info.height = real_height;
+#endif
+#if ROTATE_LOCAL_MAP
+    // This keeps the origin at the car's position, but rotates the map in such a way, that x-axis is in the direction of the car.
+    Quaternion q = Quaternion(_transform.getRotation());
+    map.info.origin.orientation.x = q.x();
+    map.info.origin.orientation.y = q.y();
+    map.info.origin.orientation.z = q.z();
+    map.info.origin.orientation.w = q.w();
+    Vector3 v = Vector3((LOCAL_MAP_WIDTH) * map.info.resolution, (LOCAL_MAP_HEIGHT) * map.info.resolution, 0);
+    Vector3 rv = quatRotate(q, v) - v;
+    map.info.origin.position.x -= rv.getX();
+    map.info.origin.position.y -= rv.getY();
 #endif
     map.data = new_map;
 

@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## Unreleased
+### Added
+- Macro `ROTATE_LOCAL_MAP` that rotates the local map in order to keep x-axis in the direction of the car.
+
 ### Changed
 - ROS1 version is using `tf2` package.
 - `tf2` dependency is shared for both ROS versions.
