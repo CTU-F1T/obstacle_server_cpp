@@ -457,8 +457,12 @@ void serverPublish() {
                     _x = circle->center.x;
                     _y = circle->center.y;
 
-                    inflateObstacle(&map, _x, _y, circle->radius);
+                    inflateObstacle(&map,
+                        int((_x - map.info.origin.position.x) / map.info.resolution),
+                        int((_y - map.info.origin.position.y) / map.info.resolution),
+                    circle->radius);
 
+                    // TODO: What is the purpose of this?
                     circle->center.x = _x * ycos - _y * ysin + tx;
                     circle->center.y = _x * ysin + _y * ycos + ty;
                 }
