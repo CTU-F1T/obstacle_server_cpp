@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/).
 
 ## Unreleased
+### Changed
+- ROS1 version is using `tf2` package.
+- `tf2` dependency is shared for both ROS versions.
+
+### Removed
+- `tf` dependency for ROS1.
+
 ## 0.2.0 - 2023-06-13
 ### Added
 - Publish local map to `/map/local`.

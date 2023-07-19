@@ -22,8 +22,9 @@
   <!-- build_depend libraries -->
   <build_depend condition="$ROS_VERSION == 1">roscpp</build_depend>
   <build_depend condition="$ROS_VERSION == 2">rclcpp</build_depend>
-  <build_depend condition="$ROS_VERSION == 1">tf</build_depend>
-  <build_depend condition="$ROS_VERSION == 2">tf2</build_depend>
+  <build_depend>tf2</build_depend>
+  <build_depend>tf2_ros</build_depend>
+  <build_depend>tf2_geometry_msgs</build_depend>
 
   <!-- build_depend message types -->
   <build_depend>obstacle_msgs</build_depend>
@@ -34,8 +35,9 @@
   <!-- exec_depend libraries -->
   <exec_depend condition="$ROS_VERSION == 1">roscpp</exec_depend>
   <exec_depend condition="$ROS_VERSION == 2">rclcpp</exec_depend>
-  <exec_depend condition="$ROS_VERSION == 1">tf</exec_depend>
-  <exec_depend condition="$ROS_VERSION == 2">tf2</exec_depend>
+  <exec_depend>tf2</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>tf2_geometry_msgs</exec_depend>
 
   <!-- exec_depend message types -->
   <exec_depend>obstacle_msgs</exec_depend>

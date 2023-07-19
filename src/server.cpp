@@ -13,7 +13,10 @@
 
 #if ROS1_BUILD
 #include "ros/ros.h"
-#include <tf/transform_listener.h>
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/buffer.h"
+#include "tf2/transform_datatypes.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 
 #include "sensor_msgs/LaserScan.h"
 #include "obstacle_msgs/ObstaclesStamped.h"
@@ -22,7 +25,8 @@
 #include "std_msgs/Header.h"
 
 using namespace ros;
-using namespace tf;
+using namespace tf2;
+using namespace tf2_ros;
 using namespace sensor_msgs;
 using namespace obstacle_msgs;
 using namespace nav_msgs;
@@ -31,8 +35,9 @@ using namespace nav_msgs;
 std::map<std::string, std::pair<std_msgs::Header, obstacle_msgs::Obstacles>> m;
 ros::Publisher pub_os;
 ros::Publisher pub_og;
-tf::TransformListener* listener;
-tf::StampedTransform transform;
+std::shared_ptr<tf2_ros::TransformListener> listener{nullptr};
+std::unique_ptr<tf2_ros::Buffer> buffer;
+geometry_msgs::TransformStamped transform;
 
 ros::Time latest;
 #elif ROS2_BUILD
@@ -400,12 +405,8 @@ void serverPublish() {
 
     // Hold onto transformation
     // It is better to do it here as we don't use every transformation.
-#if ROS1_BUILD
-    tf::StampedTransform _transform(transform);
-#elif ROS2_BUILD
     tf2::Stamped<tf2::Transform> _transform;
     tf2::fromMsg(transform, _transform);
-#endif // ROS2_BUILD
 
     double roll, pitch, yaw, ysin, ycos, tx, ty;
     Vector3 vec = _transform.getOrigin();
@@ -527,8 +528,8 @@ void serverPublish() {
 #if ROS1_BUILD
 void transformListener(const ros::TimerEvent&) {
     try {
-        listener->lookupTransform(child_frame_id, frame_id, ros::Time(0), transform);
-    } catch (tf::TransformException &ex) {
+        transform = buffer->lookupTransform(child_frame_id, frame_id, ros::Time(0));
+    } catch (tf2::TransformException &ex) {
         ROS_ERROR("%s", ex.what());
     }
 }
@@ -604,7 +605,8 @@ int main(int argc, char **argv) {
      * In addition we want to obtain and publish OccupancyGrid with all the obstacles.
      */
     ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
-    listener = new(tf::TransformListener); // Cannot be global as it leads to "call init first"
+    buffer = std::make_unique<tf2_ros::Buffer>();
+    listener = std::make_shared<tf2_ros::TransformListener>(*buffer); // Cannot be global as it leads to "call init first"
     ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback, ros::TransportHints().tcpNoDelay());
     ros::Subscriber sub_og = n.subscribe("/map_static", 1, ogCallback);
 
