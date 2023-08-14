@@ -73,8 +73,8 @@ rclcpp::Time latest;
 #endif // ROS2_BUILD
 std::string ls_frame = "laser";
 bool delay_measure = false;
-std::string frame_id = "/map";
-std::string child_frame_id = "/base_link";
+std::string frame_id = "map";
+std::string child_frame_id = "base_link";
 
 // Map
 #define FIX_MAP_SIZE 1
