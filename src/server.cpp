@@ -23,6 +23,7 @@
 #include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "std_msgs/Header.h"
+#include "nav_msgs/Path.h"
 
 using namespace ros;
 using namespace tf2;
@@ -35,6 +36,7 @@ using namespace nav_msgs;
 std::map<std::string, std::pair<std_msgs::Header, obstacle_msgs::Obstacles>> m;
 ros::Publisher pub_os;
 ros::Publisher pub_og;
+ros::Publisher pub_ptobs;
 std::shared_ptr<tf2_ros::TransformListener> listener{nullptr};
 std::unique_ptr<tf2_ros::Buffer> buffer;
 geometry_msgs::TransformStamped transform;
@@ -52,6 +54,7 @@ ros::Time latest;
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "std_msgs/msg/header.hpp"
+#include "nav_msgs/msg/path.hpp"
 
 using namespace rclcpp;
 using namespace tf2;
@@ -65,6 +68,7 @@ rclcpp::Node::SharedPtr n;
 std::map<std::string, std::pair<std_msgs::msg::Header, obstacle_msgs::msg::Obstacles>> m;
 rclcpp::Publisher<obstacle_msgs::msg::ObstaclesStamped>::SharedPtr pub_os;
 rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_og;
+rclcpp::Publisher<obstacle_msgs::msg::ObstaclesStamped>::SharedPtr pub_ptobs;
 std::shared_ptr<tf2_ros::TransformListener> listener{nullptr};
 std::unique_ptr<tf2_ros::Buffer> buffer;
 geometry_msgs::msg::TransformStamped transform;
@@ -75,6 +79,14 @@ std::string ls_frame = "laser";
 bool delay_measure = false;
 std::string frame_id = "map";
 std::string child_frame_id = "base_link";
+
+// Path
+bool check_path = false;
+#if ROS1_BUILD
+Path::ConstPtr reference_path;
+#elif ROS2_BUILD
+Path::ConstSharedPtr reference_path;
+#endif // ROS2_BUILD
 
 // Map
 #define FIX_MAP_SIZE 1
@@ -288,6 +300,19 @@ void osCallback(obstacle_msgs::msg::ObstaclesStamped::ConstSharedPtr message) {
 }
 #endif
 
+
+// Path callback
+#if ROS1_BUILD
+void ptCallback(const ros::MessageEvent<nav_msgs::Path const>& event) {
+    nav_msgs::Path::ConstPtr message = event.getMessage();
+#elif ROS2_BUILD
+void ptCallback(nav_msgs::msg::Path::ConstSharedPtr message) {
+#endif // ROS2_BUILD
+    reference_path = message;
+    check_path = true;
+}
+
+
 // OccupancyGrid callback
 #if ROS1_BUILD
 void ogCallback(const ros::MessageEvent<nav_msgs::OccupancyGrid const>& event) {
@@ -481,6 +506,31 @@ void serverPublish() {
     }
 
 
+    // Find overlap with given Path (if obtained)
+    if (check_path) {
+        ObstaclesStamped msg_path;
+#if ROS1_BUILD
+        msg_path.header.stamp = ros::Time::now();
+#elif ROS2_BUILD
+        msg_path.header.stamp = n->get_clock()->now();
+#endif // ROS2_BUILD
+        msg_path.header.frame_id = "map";
+        for (auto p : reference_path->poses) {
+            if (map.data.at(
+                        int((p.pose.position.x - map.info.origin.position.x) / map.info.resolution) +
+                        int((p.pose.position.y - map.info.origin.position.y) / map.info.resolution) * map.info.width
+                ) == 100) {
+                    CircleObstacle circle;
+                    circle.center.x = p.pose.position.x;
+                    circle.center.y = p.pose.position.y;
+                    circle.radius = map.info.resolution / 2.0;
+                    msg_path.obstacles.circles.emplace_back(circle);
+            }
+        }
+        pub_ptobs.publish(msg_path);
+    }
+
+
     // Cut the map
     std::vector<int8_t> new_map;
 
@@ -626,10 +676,12 @@ int main(int argc, char **argv) {
     listener = std::make_shared<tf2_ros::TransformListener>(*buffer); // Cannot be global as it leads to "call init first"
     ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback, ros::TransportHints().tcpNoDelay());
     ros::Subscriber sub_og = n.subscribe("/map_static", 1, ogCallback);
+    ros::Subscriber sub_pt = n.subscribe("/path", 1, ptCallback);
 
     // Publishers
     pub_os = n.advertise<obstacle_msgs::ObstaclesStamped>("/obstacles_out", 1);
     pub_og = n.advertise<nav_msgs::OccupancyGrid>("/map/local", 1);
+    pub_ptobs = n.advertise<obstacle_msgs::ObstaclesStamped>("/path/obstacles", 1);
 
     // Timers
     //ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
@@ -694,10 +746,12 @@ int main(int argc, char **argv) {
     listener = std::make_shared<tf2_ros::TransformListener>(*buffer); // Cannot be global as it leads to "call init first"
     auto sub_ls = n->create_subscription<sensor_msgs::msg::LaserScan>("/scan", rclcpp::QoS(1).best_effort().durability_volatile(), lsCallback);//, rclcpp::TransportHints().tcpNoDelay());
     auto sub_og = n->create_subscription<nav_msgs::msg::OccupancyGrid>("/map_static", rclcpp::QoS(1).reliable().transient_local(), ogCallback);
+    auto sub_pt = n->create_subscription<nav_msgs::msg::Path>("/path", rclcpp::QoS(1).reliable().transient_local(), ptCallback);
 
     // Publishers
     pub_os = n->create_publisher<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_out", rclcpp::QoS(1).best_effort().durability_volatile());
     pub_og = n->create_publisher<nav_msgs::msg::OccupancyGrid>("/map/local", rclcpp::QoS(1).best_effort().durability_volatile());
+    pub_ptobs = n->create_publisher<obstacle_msgs::msg::ObstaclesStamped>("/path/obstacles", rclcpp::QoS(1).best_effort().durability_volatile());
 
     // Timers
     //rclcpp::Timer tim_obstacles = n.createTimer(rclcpp::Duration(0.025), serverPublish);
