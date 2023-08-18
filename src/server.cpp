@@ -385,7 +385,8 @@ void ogCallback(nav_msgs::msg::OccupancyGrid::ConstSharedPtr message) {
                         auto current = saved_map.at((j + y) * metadata.width + x + i);
 
                         if (current < message->data.at(j * metadata.width + i)) {
-                            saved_map.at((j + y) * metadata.width + x + i) = message->data.at(j * metadata.width + i);
+                            // We set this to 100, to make it clear we are dealing with an obstacle.
+                            saved_map.at((j + y) * metadata.width + x + i) = 100;
                         }
                     }
                 }

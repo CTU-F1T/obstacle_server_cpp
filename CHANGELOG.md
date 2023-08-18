@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ### Changed
 - ROS1 version is using `tf2` package.
 - `tf2` dependency is shared for both ROS versions.
+- Every cell on the static map with probability > 50 is treated as obstacle.
 
 ### Removed
 - `tf` dependency for ROS1.
