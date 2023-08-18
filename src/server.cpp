@@ -88,11 +88,16 @@ Path::ConstPtr reference_path;
 Path::ConstSharedPtr reference_path;
 #endif // ROS2_BUILD
 
+// Map Filter
+// Removes map from the LaserScan
+bool filter_map = false;
+
 // Map
 #define FIX_MAP_SIZE 1
 #define ROTATE_LOCAL_MAP 1
 // All of these are multiplied by 2.
 #define INFLATION 6
+#define INFLATION_FILTER 2
 #define LOCAL_MAP_WIDTH 50
 #define LOCAL_MAP_HEIGHT 50
 bool map_received = false;
@@ -289,6 +294,42 @@ void inflateObstacle(OccupancyGrid* map, int _x, int _y, double radius = 0.0) {
 }
 
 
+// Filtration utility
+bool filterObstacle(OccupancyGrid* map, int _x, int _y, double radius = 0.0) {
+    if ((_y * map->info.width + _x) < map->data.size()) {
+        //map.data.at(_y * map.info.width + _x) = 100;
+
+        int inflation = INFLATION_FILTER;
+
+        if (radius > 0.0) {
+            inflation = int(radius / map->info.resolution);
+        }
+
+        for (int x = -inflation; x < inflation; x++) {
+            if (x + _x < 0 || x + _x >= map->info.width) {
+                continue;
+            }
+
+            for (int y = -inflation; y < inflation; y++) {
+                if (y + _y < 0 || y + _y >= map->info.height) {
+                    continue;
+                }
+
+                if (x*x + y*y >= inflation * inflation) {
+                    continue;
+                }
+
+                if (map->data.at((y + _y) * map->info.width + (x + _x)) == 100) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+
 // Obstacles callback
 #if ROS1_BUILD
 void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& event) {
@@ -465,7 +506,15 @@ void serverPublish() {
 
         if (std::get<1>(it->second).circles.size() > 0) {
             if (std::get<0>(it->second).frame_id == ls_frame) {
-                msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
+                if (!filter_map) {
+                    msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
+                } else {
+                    for (auto circle = std::get<1>(it->second).circles.begin(); circle != std::get<1>(it->second).circles.end(); ++circle) {
+                        if (!filterObstacle(&map, int((circle->center.x * ycosI - circle->center.y * ysinI + txI - map.info.origin.position.x) / map.info.resolution), int((circle->center.x * ysinI + circle->center.y * ycosI + tyI - map.info.origin.position.y) / map.info.resolution))) {
+                            msg.obstacles.circles.push_back(*circle);
+                        }
+                    }
+                }
 
                 for (auto circle = std::get<1>(it->second).circles.begin(); circle != std::get<1>(it->second).circles.end(); ++circle) {
                     inflateObstacle(&map,
@@ -476,6 +525,7 @@ void serverPublish() {
 
             } else {
                 int oldsize = msg.obstacles.circles.size();
+                // TODO: Consider whether to filter obstacles from the map as well.
                 msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
 
                 double _x, _y;
@@ -639,8 +689,10 @@ int main(int argc, char **argv) {
     /* Obtain parameters
      *
      * /delay_measure -- when true, timing is performed
+     * /filter_map -- when true, map is removed from the LaserScan data
      */
     n.getParam("delay_measure", delay_measure);
+    n_private.getParam("filter_map", filter_map);
     n_private.getParam("frame_id", frame_id);
     n_private.getParam("child_frame_id", child_frame_id);
 
@@ -705,12 +757,15 @@ int main(int argc, char **argv) {
     /* Obtain parameters
      *
      * /delay_measure -- when true, timing is performed
+     * /filter_map -- when true, map is removed from the LaserScan data
      */
     n->declare_parameter("delay_measure", ParameterValue(false));
+    n->declare_parameter("filter_map", ParameterValue(false));
     n->declare_parameter("frame_id", ParameterValue(frame_id));
     n->declare_parameter("child_frame_id", ParameterValue(child_frame_id));
 
     delay_measure = n->get_parameter("delay_measure").as_bool();
+    filter_map = n->get_parameter("filter_map").as_bool();
     frame_id = n->get_parameter("frame_id").as_string();
     child_frame_id = n->get_parameter("child_frame_id").as_string();
 

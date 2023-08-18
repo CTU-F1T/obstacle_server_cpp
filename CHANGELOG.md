@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ### Added
 - Macro `ROTATE_LOCAL_MAP` that rotates the local map in order to keep x-axis in the direction of the car.
 - Subscriber on `/path` that enables checking collisions on the Path. Obstacles are published to `/path/obstacles`.
+- Parameter `~filter_map` that enables filtering of map from the LaserScan data.
 
 ### Changed
 - ROS1 version is using `tf2` package.
