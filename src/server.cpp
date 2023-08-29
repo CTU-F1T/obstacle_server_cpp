@@ -740,7 +740,7 @@ int main(int argc, char **argv) {
             break;
         } catch (tf2::TransformException &ex) {
             ROS_ERROR("%s", ex.what());
-            ros::Duration(0.01).sleep();
+            ros::Duration(0.1).sleep();
         }
     }
 
@@ -756,7 +756,7 @@ int main(int argc, char **argv) {
 
     // Timers
     //ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
-    ros::Timer tim_transform = n.createTimer(ros::Duration(0.1), transformListener);
+    ros::Timer tim_transform = n.createTimer(ros::Duration(0.01), transformListener);
     ros::Timer tim_summary;
     if (delay_measure) tim_summary = n.createTimer(ros::Duration(2), printSummary);
 
