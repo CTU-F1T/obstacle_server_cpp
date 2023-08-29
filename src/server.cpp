@@ -613,6 +613,8 @@ void serverPublish() {
     map.info.origin.position.y += (car_y - LOCAL_MAP_HEIGHT) * map.info.resolution;
     map.info.width = 2 * LOCAL_MAP_WIDTH;
     map.info.height = 2 * LOCAL_MAP_HEIGHT;
+    int origin_x = car_x - LOCAL_MAP_WIDTH;
+    int origin_y = car_y - LOCAL_MAP_HEIGHT;
 #else
     new_map.resize(4 * (real_width) * (real_height));
 
@@ -626,10 +628,12 @@ void serverPublish() {
     map.info.origin.position.y += (std::max(0, car_y - LOCAL_MAP_HEIGHT) * map.info.resolution);
     map.info.width = real_width;
     map.info.height = real_height;
+    int origin_x = std::max(0, car_x - LOCAL_MAP_WIDTH);
+    int origin_y = std::max(0, car_y - LOCAL_MAP_HEIGHT);
 #endif
 #if ROTATE_LOCAL_MAP
     // This keeps the origin at the car's position, but rotates the map in such a way, that x-axis is in the direction of the car.
-    Quaternion q = Quaternion(_transform.getRotation());
+    Quaternion q = Quaternion(_transform.inverse().getRotation());
     map.info.origin.orientation.x = q.x();
     map.info.origin.orientation.y = q.y();
     map.info.origin.orientation.z = q.z();
@@ -638,6 +642,24 @@ void serverPublish() {
     Vector3 rv = quatRotate(q, v) - v;
     map.info.origin.position.x -= rv.getX();
     map.info.origin.position.y -= rv.getY();
+
+    // Inspired by https://stackoverflow.com/questions/56981096/rotate-an-image-in-c-without-using-opencv-functions
+    for (int row = 0; row < map.info.height; row++) {
+        for (int col = 0; col < map.info.width; col++) {
+            // Care that here we use multiple datatypes, which leads to interpretation error
+            v = Vector3(col - (map.info.width / 2.0), row - (map.info.height / 2.0), 0);
+            rv = quatRotate(q, v);
+
+            int x = static_cast<int>(rv.getX() + 0.5 + origin_x + (map.info.width / 2.0));
+            int y = static_cast<int>(rv.getY() + 0.5 + origin_y + (map.info.height / 2.0));
+
+            if (x >= 0 && x < metadata.width && y >= 0 && y < metadata.height) {
+                new_map.at(map.info.width * row + col) = map.data.at(y * metadata.width + x);
+            } else {
+                new_map.at(map.info.width * row + col) = 50;
+            }
+        }
+    }
 #endif
     map.data = new_map;
 
