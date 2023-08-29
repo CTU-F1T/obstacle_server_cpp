@@ -539,7 +539,7 @@ void serverPublish() {
                         int((_y - map.info.origin.position.y) / map.info.resolution),
                     circle->radius);
 
-                    // TODO: What is the purpose of this?
+                    // Conversion of global to local coordinates
                     circle->center.x = _x * ycos - _y * ysin + tx;
                     circle->center.y = _x * ysin + _y * ycos + ty;
                 }
