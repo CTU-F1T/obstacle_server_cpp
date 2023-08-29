@@ -724,9 +724,23 @@ int main(int argc, char **argv) {
      *
      * In addition we want to obtain and publish OccupancyGrid with all the obstacles.
      */
-    ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
     buffer = std::make_unique<tf2_ros::Buffer>();
     listener = std::make_shared<tf2_ros::TransformListener>(*buffer); // Cannot be global as it leads to "call init first"
+
+    // Wait for transform.
+    ROS_WARN_STREAM("Waiting for '" << frame_id << "' -> '" << child_frame_id << "' transform...");
+    while (ros::ok()) {
+        try {
+            transform = buffer->lookupTransform(child_frame_id, frame_id, ros::Time(0));
+            ROS_WARN("Transform found.");
+            break;
+        } catch (tf2::TransformException &ex) {
+            ROS_ERROR("%s", ex.what());
+            ros::Duration(0.01).sleep();
+        }
+    }
+
+    ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
     ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback, ros::TransportHints().tcpNoDelay());
     ros::Subscriber sub_og = n.subscribe("/map_static", 1, ogCallback);
     ros::Subscriber sub_pt = n.subscribe("/path", 1, ptCallback);
@@ -738,7 +752,7 @@ int main(int argc, char **argv) {
 
     // Timers
     //ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
-    ros::Timer tim_transform = n.createTimer(ros::Duration(0.01), transformListener);
+    ros::Timer tim_transform = n.createTimer(ros::Duration(0.1), transformListener);
     ros::Timer tim_summary;
     if (delay_measure) tim_summary = n.createTimer(ros::Duration(2), printSummary);
 
@@ -797,9 +811,24 @@ int main(int argc, char **argv) {
      *
      * In addition we want to obtain and publish OccupancyGrid with all the obstacles.
      */
-    auto sub_os = n->create_subscription<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_in", rclcpp::QoS(5).best_effort().durability_volatile(), osCallback);
+
     buffer = std::make_unique<tf2_ros::Buffer>(n->get_clock());
     listener = std::make_shared<tf2_ros::TransformListener>(*buffer); // Cannot be global as it leads to "call init first"
+
+    // Wait for transform.
+    RCLCPP_WARN_STREAM(rclcpp::get_logger("obstacle_server_cpp"), "Waiting for '" << frame_id << "' -> '" << child_frame_id << "' transform...");
+    while (rclcpp::ok()) {
+        try {
+            transform = buffer->lookupTransform(child_frame_id, frame_id, tf2::TimePointZero);
+            RCLCPP_WARN(rclcpp::get_logger("obstacle_server_cpp"), "Transform found.");
+            break;
+        } catch (tf2::TransformException &ex) {
+            RCLCPP_ERROR(rclcpp::get_logger("obstacle_server_cpp"), "%s", ex.what());
+            rclcpp::sleep_for(std::chrono::nanoseconds(100000000));
+        }
+    }
+
+    auto sub_os = n->create_subscription<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_in", rclcpp::QoS(5).best_effort().durability_volatile(), osCallback);
     auto sub_ls = n->create_subscription<sensor_msgs::msg::LaserScan>("/scan", rclcpp::QoS(1).best_effort().durability_volatile(), lsCallback);//, rclcpp::TransportHints().tcpNoDelay());
     auto sub_og = n->create_subscription<nav_msgs::msg::OccupancyGrid>("/map_static", rclcpp::QoS(1).reliable().transient_local(), ogCallback);
     auto sub_pt = n->create_subscription<nav_msgs::msg::Path>("/path", rclcpp::QoS(1).reliable().transient_local(), ptCallback);
