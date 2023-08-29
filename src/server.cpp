@@ -469,7 +469,7 @@ void serverPublish() {
 #elif ROS2_BUILD
     msg.header.stamp = n->get_clock()->now();
 #endif // ROS2_BUILD
-    msg.header.frame_id = ls_frame;
+    msg.header.frame_id = "map";
 
     // Hold onto transformation
     // It is better to do it here as we don't use every transformation.
@@ -512,7 +512,11 @@ void serverPublish() {
                 } else {
                     for (auto circle = std::get<1>(it->second).circles.begin(); circle != std::get<1>(it->second).circles.end(); ++circle) {
                         if (!filterObstacle(&map, int((circle->center.x * ycosI - circle->center.y * ysinI + txI - map.info.origin.position.x) / map.info.resolution), int((circle->center.x * ysinI + circle->center.y * ycosI + tyI - map.info.origin.position.y) / map.info.resolution))) {
-                            msg.obstacles.circles.push_back(*circle);
+                            CircleObstacle c;
+                            c.center.x = circle->center.x * ycosI - circle->center.y * ysinI + txI;
+                            c.center.y = circle->center.x * ysinI + circle->center.y * ycosI + tyI;
+                            c.radius = 0.01;
+                            msg.obstacles.circles.emplace_back(c);
                         }
                     }
                 }
