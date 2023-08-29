@@ -578,7 +578,11 @@ void serverPublish() {
                     msg_path.obstacles.circles.emplace_back(circle);
             }
         }
+        #if ROS1_BUILD
         pub_ptobs.publish(msg_path);
+        #elif ROS2_BUILD
+        pub_ptobs->publish(msg_path);
+        #endif // ROS2_BUILD
     }
 
 
