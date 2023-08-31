@@ -20,17 +20,16 @@ set(dep_pkgs
     std_msgs
     sensor_msgs
     nav_msgs
-)
-
-set(dep_ros1_pkgs
-    tf
-)
-
-set(dep_ros2_pkgs
     tf2
     tf2_ros
     tf2_geometry_msgs
 )
+
+#set(dep_ros1_pkgs
+#)
+
+#set(dep_ros2_pkgs
+#)
 
 
 ## Find catkin macros and libraries
@@ -41,14 +40,14 @@ add_definitions(-DROS1_BUILD)
 find_package(catkin REQUIRED
     roscpp
     ${dep_pkgs}
-    ${dep_ros1_pkgs}
+#    ${dep_ros1_pkgs}
 )
 
 catkin_package(
    CATKIN_DEPENDS
     roscpp
     ${dep_pkgs}
-    ${dep_ros1_pkgs}
+#    ${dep_ros1_pkgs}
 )
 
 include_directories(
@@ -73,16 +72,16 @@ foreach (pkg ${dep_pkgs})
     find_package(${pkg} REQUIRED)
 endforeach()
 
-foreach (pkg ${dep_ros2_pkgs})
-    find_package(${pkg} REQUIRED)
-endforeach()
+#foreach (pkg ${dep_ros2_pkgs})
+#    find_package(${pkg} REQUIRED)
+#endforeach()
 
 add_executable(${PROJECT_NAME}_node src/server.cpp)
 
 ament_target_dependencies(${PROJECT_NAME}_node
   rclcpp
   ${dep_pkgs}
-  ${dep_ros2_pkgs}
+#  ${dep_ros2_pkgs}
 )
 
 install(

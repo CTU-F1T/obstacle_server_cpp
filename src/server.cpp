@@ -13,16 +13,21 @@
 
 #if ROS1_BUILD
 #include "ros/ros.h"
-#include <tf/transform_listener.h>
+#include "tf2_ros/transform_listener.h"
+#include "tf2_ros/buffer.h"
+#include "tf2/transform_datatypes.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.h"
 
 #include "sensor_msgs/LaserScan.h"
 #include "obstacle_msgs/ObstaclesStamped.h"
 #include "nav_msgs/MapMetaData.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "std_msgs/Header.h"
+#include "nav_msgs/Path.h"
 
 using namespace ros;
-using namespace tf;
+using namespace tf2;
+using namespace tf2_ros;
 using namespace sensor_msgs;
 using namespace obstacle_msgs;
 using namespace nav_msgs;
@@ -31,8 +36,10 @@ using namespace nav_msgs;
 std::map<std::string, std::pair<std_msgs::Header, obstacle_msgs::Obstacles>> m;
 ros::Publisher pub_os;
 ros::Publisher pub_og;
-tf::TransformListener* listener;
-tf::StampedTransform transform;
+ros::Publisher pub_ptobs;
+std::shared_ptr<tf2_ros::TransformListener> listener{nullptr};
+std::unique_ptr<tf2_ros::Buffer> buffer;
+geometry_msgs::TransformStamped transform;
 
 ros::Time latest;
 #elif ROS2_BUILD
@@ -47,6 +54,7 @@ ros::Time latest;
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "std_msgs/msg/header.hpp"
+#include "nav_msgs/msg/path.hpp"
 
 using namespace rclcpp;
 using namespace tf2;
@@ -60,6 +68,7 @@ rclcpp::Node::SharedPtr n;
 std::map<std::string, std::pair<std_msgs::msg::Header, obstacle_msgs::msg::Obstacles>> m;
 rclcpp::Publisher<obstacle_msgs::msg::ObstaclesStamped>::SharedPtr pub_os;
 rclcpp::Publisher<nav_msgs::msg::OccupancyGrid>::SharedPtr pub_og;
+rclcpp::Publisher<obstacle_msgs::msg::ObstaclesStamped>::SharedPtr pub_ptobs;
 std::shared_ptr<tf2_ros::TransformListener> listener{nullptr};
 std::unique_ptr<tf2_ros::Buffer> buffer;
 geometry_msgs::msg::TransformStamped transform;
@@ -68,13 +77,27 @@ rclcpp::Time latest;
 #endif // ROS2_BUILD
 std::string ls_frame = "laser";
 bool delay_measure = false;
-std::string frame_id = "/map";
-std::string child_frame_id = "/base_link";
+std::string frame_id = "map";
+std::string child_frame_id = "base_link";
+
+// Path
+bool check_path = false;
+#if ROS1_BUILD
+Path::ConstPtr reference_path;
+#elif ROS2_BUILD
+Path::ConstSharedPtr reference_path;
+#endif // ROS2_BUILD
+
+// Map Filter
+// Removes map from the LaserScan
+bool filter_map = false;
 
 // Map
 #define FIX_MAP_SIZE 1
+#define ROTATE_LOCAL_MAP 1
 // All of these are multiplied by 2.
 #define INFLATION 6
+#define INFLATION_FILTER 2
 #define LOCAL_MAP_WIDTH 50
 #define LOCAL_MAP_HEIGHT 50
 bool map_received = false;
@@ -271,6 +294,42 @@ void inflateObstacle(OccupancyGrid* map, int _x, int _y, double radius = 0.0) {
 }
 
 
+// Filtration utility
+bool filterObstacle(OccupancyGrid* map, int _x, int _y, double radius = 0.0) {
+    if ((_y * map->info.width + _x) < map->data.size()) {
+        //map.data.at(_y * map.info.width + _x) = 100;
+
+        int inflation = INFLATION_FILTER;
+
+        if (radius > 0.0) {
+            inflation = int(radius / map->info.resolution);
+        }
+
+        for (int x = -inflation; x < inflation; x++) {
+            if (x + _x < 0 || x + _x >= map->info.width) {
+                continue;
+            }
+
+            for (int y = -inflation; y < inflation; y++) {
+                if (y + _y < 0 || y + _y >= map->info.height) {
+                    continue;
+                }
+
+                if (x*x + y*y >= inflation * inflation) {
+                    continue;
+                }
+
+                if (map->data.at((y + _y) * map->info.width + (x + _x)) == 100) {
+                    return true;
+                }
+            }
+        }
+    }
+
+    return false;
+}
+
+
 // Obstacles callback
 #if ROS1_BUILD
 void osCallback(const ros::MessageEvent<obstacle_msgs::ObstaclesStamped const>& event) {
@@ -281,6 +340,19 @@ void osCallback(obstacle_msgs::msg::ObstaclesStamped::ConstSharedPtr message) {
     m["obstacles"] = std::pair<std_msgs::msg::Header, obstacle_msgs::msg::Obstacles>(message->header, message->obstacles);
 }
 #endif
+
+
+// Path callback
+#if ROS1_BUILD
+void ptCallback(const ros::MessageEvent<nav_msgs::Path const>& event) {
+    nav_msgs::Path::ConstPtr message = event.getMessage();
+#elif ROS2_BUILD
+void ptCallback(nav_msgs::msg::Path::ConstSharedPtr message) {
+#endif // ROS2_BUILD
+    reference_path = message;
+    check_path = true;
+}
+
 
 // OccupancyGrid callback
 #if ROS1_BUILD
@@ -313,7 +385,8 @@ void ogCallback(nav_msgs::msg::OccupancyGrid::ConstSharedPtr message) {
                         auto current = saved_map.at((j + y) * metadata.width + x + i);
 
                         if (current < message->data.at(j * metadata.width + i)) {
-                            saved_map.at((j + y) * metadata.width + x + i) = message->data.at(j * metadata.width + i);
+                            // We set this to 100, to make it clear we are dealing with an obstacle.
+                            saved_map.at((j + y) * metadata.width + x + i) = 100;
                         }
                     }
                 }
@@ -396,16 +469,12 @@ void serverPublish() {
 #elif ROS2_BUILD
     msg.header.stamp = n->get_clock()->now();
 #endif // ROS2_BUILD
-    msg.header.frame_id = ls_frame;
+    msg.header.frame_id = "map";
 
     // Hold onto transformation
     // It is better to do it here as we don't use every transformation.
-#if ROS1_BUILD
-    tf::StampedTransform _transform(transform);
-#elif ROS2_BUILD
     tf2::Stamped<tf2::Transform> _transform;
     tf2::fromMsg(transform, _transform);
-#endif // ROS2_BUILD
 
     double roll, pitch, yaw, ysin, ycos, tx, ty;
     Vector3 vec = _transform.getOrigin();
@@ -438,7 +507,19 @@ void serverPublish() {
 
         if (std::get<1>(it->second).circles.size() > 0) {
             if (std::get<0>(it->second).frame_id == ls_frame) {
-                msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
+                if (!filter_map) {
+                    msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
+                } else {
+                    for (auto circle = std::get<1>(it->second).circles.begin(); circle != std::get<1>(it->second).circles.end(); ++circle) {
+                        if (!filterObstacle(&map, int((circle->center.x * ycosI - circle->center.y * ysinI + txI - map.info.origin.position.x) / map.info.resolution), int((circle->center.x * ysinI + circle->center.y * ycosI + tyI - map.info.origin.position.y) / map.info.resolution))) {
+                            CircleObstacle c;
+                            c.center.x = circle->center.x * ycosI - circle->center.y * ysinI + txI;
+                            c.center.y = circle->center.x * ysinI + circle->center.y * ycosI + tyI;
+                            c.radius = 0.01;
+                            msg.obstacles.circles.emplace_back(c);
+                        }
+                    }
+                }
 
                 for (auto circle = std::get<1>(it->second).circles.begin(); circle != std::get<1>(it->second).circles.end(); ++circle) {
                     inflateObstacle(&map,
@@ -449,6 +530,7 @@ void serverPublish() {
 
             } else {
                 int oldsize = msg.obstacles.circles.size();
+                // TODO: Consider whether to filter obstacles from the map as well.
                 msg.obstacles.circles.insert(msg.obstacles.circles.end(), std::get<1>(it->second).circles.begin(), std::get<1>(it->second).circles.end());
 
                 double _x, _y;
@@ -456,8 +538,12 @@ void serverPublish() {
                     _x = circle->center.x;
                     _y = circle->center.y;
 
-                    inflateObstacle(&map, _x, _y, circle->radius);
+                    inflateObstacle(&map,
+                        int((_x - map.info.origin.position.x) / map.info.resolution),
+                        int((_y - map.info.origin.position.y) / map.info.resolution),
+                    circle->radius);
 
+                    // Conversion of global to local coordinates
                     circle->center.x = _x * ycos - _y * ysin + tx;
                     circle->center.y = _x * ysin + _y * ycos + ty;
                 }
@@ -472,6 +558,35 @@ void serverPublish() {
     if (m.size() > 0 and latest.seconds() > 0) {
 #endif // ROS2_BUILD
         dm_server.delay(latest);
+    }
+
+
+    // Find overlap with given Path (if obtained)
+    if (check_path) {
+        ObstaclesStamped msg_path;
+#if ROS1_BUILD
+        msg_path.header.stamp = ros::Time::now();
+#elif ROS2_BUILD
+        msg_path.header.stamp = n->get_clock()->now();
+#endif // ROS2_BUILD
+        msg_path.header.frame_id = "map";
+        for (auto p : reference_path->poses) {
+            if (map.data.at(
+                        int((p.pose.position.x - map.info.origin.position.x) / map.info.resolution) +
+                        int((p.pose.position.y - map.info.origin.position.y) / map.info.resolution) * map.info.width
+                ) == 100) {
+                    CircleObstacle circle;
+                    circle.center.x = p.pose.position.x;
+                    circle.center.y = p.pose.position.y;
+                    circle.radius = map.info.resolution / 2.0;
+                    msg_path.obstacles.circles.emplace_back(circle);
+            }
+        }
+        #if ROS1_BUILD
+        pub_ptobs.publish(msg_path);
+        #elif ROS2_BUILD
+        pub_ptobs->publish(msg_path);
+        #endif // ROS2_BUILD
     }
 
 
@@ -498,6 +613,8 @@ void serverPublish() {
     map.info.origin.position.y += (car_y - LOCAL_MAP_HEIGHT) * map.info.resolution;
     map.info.width = 2 * LOCAL_MAP_WIDTH;
     map.info.height = 2 * LOCAL_MAP_HEIGHT;
+    int origin_x = car_x - LOCAL_MAP_WIDTH;
+    int origin_y = car_y - LOCAL_MAP_HEIGHT;
 #else
     new_map.resize(4 * (real_width) * (real_height));
 
@@ -511,6 +628,38 @@ void serverPublish() {
     map.info.origin.position.y += (std::max(0, car_y - LOCAL_MAP_HEIGHT) * map.info.resolution);
     map.info.width = real_width;
     map.info.height = real_height;
+    int origin_x = std::max(0, car_x - LOCAL_MAP_WIDTH);
+    int origin_y = std::max(0, car_y - LOCAL_MAP_HEIGHT);
+#endif
+#if ROTATE_LOCAL_MAP
+    // This keeps the origin at the car's position, but rotates the map in such a way, that x-axis is in the direction of the car.
+    Quaternion q = Quaternion(_transform.inverse().getRotation());
+    map.info.origin.orientation.x = q.x();
+    map.info.origin.orientation.y = q.y();
+    map.info.origin.orientation.z = q.z();
+    map.info.origin.orientation.w = q.w();
+    Vector3 v = Vector3((LOCAL_MAP_WIDTH) * map.info.resolution, (LOCAL_MAP_HEIGHT) * map.info.resolution, 0);
+    Vector3 rv = quatRotate(q, v) - v;
+    map.info.origin.position.x -= rv.getX();
+    map.info.origin.position.y -= rv.getY();
+
+    // Inspired by https://stackoverflow.com/questions/56981096/rotate-an-image-in-c-without-using-opencv-functions
+    for (int row = 0; row < map.info.height; row++) {
+        for (int col = 0; col < map.info.width; col++) {
+            // Care that here we use multiple datatypes, which leads to interpretation error
+            v = Vector3(col - (map.info.width / 2.0), row - (map.info.height / 2.0), 0);
+            rv = quatRotate(q, v);
+
+            int x = static_cast<int>(rv.getX() + 0.5 + origin_x + (map.info.width / 2.0));
+            int y = static_cast<int>(rv.getY() + 0.5 + origin_y + (map.info.height / 2.0));
+
+            if (x >= 0 && x < metadata.width && y >= 0 && y < metadata.height) {
+                new_map.at(map.info.width * row + col) = map.data.at(y * metadata.width + x);
+            } else {
+                new_map.at(map.info.width * row + col) = 50;
+            }
+        }
+    }
 #endif
     map.data = new_map;
 
@@ -527,8 +676,8 @@ void serverPublish() {
 #if ROS1_BUILD
 void transformListener(const ros::TimerEvent&) {
     try {
-        listener->lookupTransform(child_frame_id, frame_id, ros::Time(0), transform);
-    } catch (tf::TransformException &ex) {
+        transform = buffer->lookupTransform(child_frame_id, frame_id, ros::Time(0));
+    } catch (tf2::TransformException &ex) {
         ROS_ERROR("%s", ex.what());
     }
 }
@@ -571,8 +720,10 @@ int main(int argc, char **argv) {
     /* Obtain parameters
      *
      * /delay_measure -- when true, timing is performed
+     * /filter_map -- when true, map is removed from the LaserScan data
      */
     n.getParam("delay_measure", delay_measure);
+    n_private.getParam("filter_map", filter_map);
     n_private.getParam("frame_id", frame_id);
     n_private.getParam("child_frame_id", child_frame_id);
 
@@ -603,14 +754,31 @@ int main(int argc, char **argv) {
      *
      * In addition we want to obtain and publish OccupancyGrid with all the obstacles.
      */
+    buffer = std::make_unique<tf2_ros::Buffer>();
+    listener = std::make_shared<tf2_ros::TransformListener>(*buffer); // Cannot be global as it leads to "call init first"
+
+    // Wait for transform.
+    ROS_WARN_STREAM("Waiting for '" << frame_id << "' -> '" << child_frame_id << "' transform...");
+    while (ros::ok()) {
+        try {
+            transform = buffer->lookupTransform(child_frame_id, frame_id, ros::Time(0));
+            ROS_WARN("Transform found.");
+            break;
+        } catch (tf2::TransformException &ex) {
+            ROS_ERROR("%s", ex.what());
+            ros::Duration(0.1).sleep();
+        }
+    }
+
     ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
-    listener = new(tf::TransformListener); // Cannot be global as it leads to "call init first"
     ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback, ros::TransportHints().tcpNoDelay());
     ros::Subscriber sub_og = n.subscribe("/map_static", 1, ogCallback);
+    ros::Subscriber sub_pt = n.subscribe("/path", 1, ptCallback);
 
     // Publishers
     pub_os = n.advertise<obstacle_msgs::ObstaclesStamped>("/obstacles_out", 1);
     pub_og = n.advertise<nav_msgs::OccupancyGrid>("/map/local", 1);
+    pub_ptobs = n.advertise<obstacle_msgs::ObstaclesStamped>("/path/obstacles", 1);
 
     // Timers
     //ros::Timer tim_obstacles = n.createTimer(ros::Duration(0.025), serverPublish);
@@ -634,12 +802,15 @@ int main(int argc, char **argv) {
     /* Obtain parameters
      *
      * /delay_measure -- when true, timing is performed
+     * /filter_map -- when true, map is removed from the LaserScan data
      */
     n->declare_parameter("delay_measure", ParameterValue(false));
+    n->declare_parameter("filter_map", ParameterValue(false));
     n->declare_parameter("frame_id", ParameterValue(frame_id));
     n->declare_parameter("child_frame_id", ParameterValue(child_frame_id));
 
     delay_measure = n->get_parameter("delay_measure").as_bool();
+    filter_map = n->get_parameter("filter_map").as_bool();
     frame_id = n->get_parameter("frame_id").as_string();
     child_frame_id = n->get_parameter("child_frame_id").as_string();
 
@@ -670,15 +841,32 @@ int main(int argc, char **argv) {
      *
      * In addition we want to obtain and publish OccupancyGrid with all the obstacles.
      */
-    auto sub_os = n->create_subscription<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_in", rclcpp::QoS(5).best_effort().durability_volatile(), osCallback);
+
     buffer = std::make_unique<tf2_ros::Buffer>(n->get_clock());
     listener = std::make_shared<tf2_ros::TransformListener>(*buffer); // Cannot be global as it leads to "call init first"
+
+    // Wait for transform.
+    RCLCPP_WARN_STREAM(rclcpp::get_logger("obstacle_server_cpp"), "Waiting for '" << frame_id << "' -> '" << child_frame_id << "' transform...");
+    while (rclcpp::ok()) {
+        try {
+            transform = buffer->lookupTransform(child_frame_id, frame_id, tf2::TimePointZero);
+            RCLCPP_WARN(rclcpp::get_logger("obstacle_server_cpp"), "Transform found.");
+            break;
+        } catch (tf2::TransformException &ex) {
+            RCLCPP_ERROR(rclcpp::get_logger("obstacle_server_cpp"), "%s", ex.what());
+            rclcpp::sleep_for(std::chrono::nanoseconds(100000000));
+        }
+    }
+
+    auto sub_os = n->create_subscription<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_in", rclcpp::QoS(5).best_effort().durability_volatile(), osCallback);
     auto sub_ls = n->create_subscription<sensor_msgs::msg::LaserScan>("/scan", rclcpp::QoS(1).best_effort().durability_volatile(), lsCallback);//, rclcpp::TransportHints().tcpNoDelay());
     auto sub_og = n->create_subscription<nav_msgs::msg::OccupancyGrid>("/map_static", rclcpp::QoS(1).reliable().transient_local(), ogCallback);
+    auto sub_pt = n->create_subscription<nav_msgs::msg::Path>("/path", rclcpp::QoS(1).reliable().transient_local(), ptCallback);
 
     // Publishers
     pub_os = n->create_publisher<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_out", rclcpp::QoS(1).best_effort().durability_volatile());
     pub_og = n->create_publisher<nav_msgs::msg::OccupancyGrid>("/map/local", rclcpp::QoS(1).best_effort().durability_volatile());
+    pub_ptobs = n->create_publisher<obstacle_msgs::msg::ObstaclesStamped>("/path/obstacles", rclcpp::QoS(1).best_effort().durability_volatile());
 
     // Timers
     //rclcpp::Timer tim_obstacles = n.createTimer(rclcpp::Duration(0.025), serverPublish);
