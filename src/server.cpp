@@ -770,6 +770,19 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Initialize saved_map
+    saved_map.resize(4 * LOCAL_MAP_WIDTH * LOCAL_MAP_HEIGHT, 255);
+    metadata.width = LOCAL_MAP_WIDTH * 2;
+    metadata.height = LOCAL_MAP_HEIGHT * 2;
+    metadata.resolution = 0.05;
+    metadata.origin.position.x = -metadata.resolution * LOCAL_MAP_WIDTH;
+    metadata.origin.position.y = -metadata.resolution * LOCAL_MAP_HEIGHT;
+    metadata.origin.position.z = 0.0;
+    metadata.origin.orientation.x = 0.0;
+    metadata.origin.orientation.y = 0.0;
+    metadata.origin.orientation.z = 0.0;
+    metadata.origin.orientation.w = 1.0;
+
     ros::Subscriber sub_os = n.subscribe("/obstacles_in", 1, osCallback);
     ros::Subscriber sub_ls = n.subscribe("/scan", 1, lsCallback, ros::TransportHints().tcpNoDelay());
     ros::Subscriber sub_og = n.subscribe("/map_static", 1, ogCallback);
@@ -857,6 +870,19 @@ int main(int argc, char **argv) {
             rclcpp::sleep_for(std::chrono::nanoseconds(100000000));
         }
     }
+
+    // Initialize saved_map
+    saved_map.resize(4 * LOCAL_MAP_WIDTH * LOCAL_MAP_HEIGHT, 255);
+    metadata.width = LOCAL_MAP_WIDTH * 2;
+    metadata.height = LOCAL_MAP_HEIGHT * 2;
+    metadata.resolution = 0.05;
+    metadata.origin.position.x = -metadata.resolution * LOCAL_MAP_WIDTH;
+    metadata.origin.position.y = -metadata.resolution * LOCAL_MAP_HEIGHT;
+    metadata.origin.position.z = 0.0;
+    metadata.origin.orientation.x = 0.0;
+    metadata.origin.orientation.y = 0.0;
+    metadata.origin.orientation.z = 0.0;
+    metadata.origin.orientation.w = 1.0;
 
     auto sub_os = n->create_subscription<obstacle_msgs::msg::ObstaclesStamped>("/obstacles_in", rclcpp::QoS(5).best_effort().durability_volatile(), osCallback);
     auto sub_ls = n->create_subscription<sensor_msgs::msg::LaserScan>("/scan", rclcpp::QoS(1).best_effort().durability_volatile(), lsCallback);//, rclcpp::TransportHints().tcpNoDelay());
